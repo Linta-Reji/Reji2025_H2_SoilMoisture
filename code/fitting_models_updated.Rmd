@@ -1,0 +1,510 @@
+---
+title: "Untitled"
+output: html_document
+date: "2025-02-16"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Load image
+
+```{r}
+data.path = dirname(getwd())
+load(paste0(data.path, "/data/fitting_models_updated.RData"))
+```
+
+Load libraries:
+```{r, echo=FALSE, message=FALSE}
+library(tidyverse)
+library(purrr)
+library(minpack.lm)
+library(ggplot2)
+library(patchwork)
+library(scales)
+```
+
+## MODELS
+### Define functions
+```{r}
+# Yashiro/Smith-Downey
+# g_T_smith_downey = function(T) {
+  #return(1 / (1 + exp(-0.1718 * (T + 273.15) + 46.9388)))
+#}
+
+#f_M_smith_downey <- function(frac_water_pores_avg) {
+  #f_M <- 14.3 * frac_water_pores_avg - 1.14
+  #f_M <- pmin(pmax(f_M, 0), 1)
+  #return(f_M)
+#}
+
+# Ehhalt
+# temp function
+g_T <- function(T) {
+  return(1 / (1 + exp(-(T - 3.8) / 6.7)) + 1 / (1 + exp((T - 62.7) / 7.1)) - 1)
+}
+
+# two different functions for moisture dependence of sand and loam
+f_M_sand <- function(frac_water_pores_avg) {
+  f_M <- 0.00936 * (frac_water_pores_avg - 0.0264) * (1 - frac_water_pores_avg) / 
+         (frac_water_pores_avg^2 - 0.1715 * frac_water_pores_avg + 0.03144)
+  f_M <- pmax(f_M, 0)
+  return(f_M)
+}
+
+f_M_loam <- function(frac_water_pores_avg) {
+  f_M <- 0.01997 * (frac_water_pores_avg - 0.05369) * (0.8508 - frac_water_pores_avg) / 
+         (frac_water_pores_avg^2 - 0.7541 * frac_water_pores_avg + 0.2806)
+  f_M <- pmax(f_M, 0)
+  return(f_M)
+}
+
+# A few moisture parameterization and generic wrapper
+
+# Moisture functions
+f_M_bertagni <- function(s, s_ws, beta1, beta2, N) {
+  if (s > s_ws && s < 1) {
+    f_M <- 1 / N * (s - s_ws)^beta1 * (1 - s)^beta2
+  } else {
+    f_M <- 0
+  }
+  return(f_M)
+}
+
+
+# For fitting Matteo's model
+calc_k_psi <- function(beta1, psi_ws, psi_opt, prek, obs) {
+  ot <- obs
+  
+  ot$s_ws <- mapply(function(psi_MPa, b) (psi_MPa / psi_ws)^(1 / b), ot$Psi_MPa, ot$b)
+  ot$s_opt <- mapply(function(psi_MPa, b) (psi_MPa / psi_opt)^(1 / b), ot$Psi_MPa, ot$b)
+  
+  ot$beta1 <- beta1
+  ot$beta2 <- mapply(function(beta1, s_opt, s_ws) beta1 * (1 - s_opt) / (s_opt - s_ws), 
+                     ot$beta1, ot$s_opt, ot$s_ws)
+  ot$N <- mapply(function(s_opt, s_ws, beta1, beta2) (s_opt - s_ws)^beta1 * (1 - s_opt)^beta2, 
+                 ot$s_opt, ot$s_ws, ot$beta1, ot$beta2)
+  
+  ot$moisture <- mapply(psi_to_moisture, ot$WP, ot$Psi_MPa, ot$b)
+  ot$predicted_k <- mapply(function(moisture, s_ws, beta1, beta2, N, t_ref) 
+                            prek * f_M_bertagni(moisture, s_ws, beta1, beta2, N) * g_T(t_ref), 
+                            ot$moisture, ot$s_ws, ot$beta1, ot$beta2, ot$N, MoreArgs = list(t_ref = t_ref))
+  
+  return(ot)
+}
+
+calc_k_moisture <- function(beta1, s_ws, s_opt, prek, obs) {
+  ot <- obs
+  
+  ot$beta1 <- beta1
+  ot$beta2 <- mapply(function(beta1, s_opt, s_ws) beta1 * (1 - s_opt) / (s_opt - s_ws), 
+                     ot$beta1, s_opt, s_ws)
+  ot$N <- mapply(function(s_opt, s_ws, beta1, beta2) (s_opt - s_ws)^beta1 * (1 - s_opt)^beta2, 
+                 s_opt, s_ws, ot$beta1, ot$beta2)
+  
+  ot$predicted_k <- mapply(function(moisture_for_fit, s_ws, beta1, beta2, N, t_ref) 
+                            prek * f_M_bertagni(moisture_for_fit, s_ws, beta1, beta2, N) * g_T(t_ref), 
+                            ot$moisture_for_fit, s_ws, ot$beta1, ot$beta2, ot$N, MoreArgs = list(t_ref = t_ref))
+  
+  return(ot)
+}
+
+# Function-dependent fit
+calc_k_psi_g <- function(fM, param_df, obs, t_ref) {
+  ot <- obs
+  
+  if (fM == 'Bertagni') {
+    ot$s_ws <- mapply(function(psi_MPa, b) (psi_MPa / param_df$psi_ws)^(1 / b), ot$Psi_MPa, ot$b)
+    ot$s_opt <- mapply(function(psi_MPa, b) (psi_MPa / param_df$psi_opt)^(1 / b), ot$Psi_MPa, ot$b)
+    
+    ot$beta2 <- mapply(function(s_opt, s_ws) param_df$beta1 * (1 - s_opt) / (s_opt - s_ws), 
+                       ot$s_opt, ot$s_ws)
+    ot$N <- mapply(function(s_opt, s_ws, beta1, beta2) (s_opt - s_ws)^beta1 * (1 - s_opt)^beta2, 
+                   ot$s_opt, ot$s_ws, param_df$beta1, ot$beta2)
+    
+    ot$predicted_k <- mapply(function(moisture_for_fit, s_ws, beta1, beta2, N, soil_type, t_ref) 
+                              param_df[[paste0("km_", soil_type)]] * f_M_bertagni(moisture_for_fit, s_ws, beta1, beta2, N) * g_T(t_ref), 
+                              ot$moisture_for_fit, ot$s_ws, param_df$beta1, ot$beta2, ot$N, ot$soil_type, MoreArgs = list(t_ref = t_ref))
+    
+  } else if (fM == 'Sun') {
+    ot$s_opt <- mapply(function(psi_MPa, b) (psi_MPa / param_df$psi_opt * 1e-3)^(1 / b), ot$Psi_MPa, ot$b)
+    ot$s_ws <- mapply(function(psi_MPa, b) (psi_MPa / param_df$psi_ws * 1e-3)^(1 / b), ot$Psi_MPa, ot$b)
+    
+    ot$predicted_k <- mapply(function(moisture_for_fit, s_ws, s_opt, soil_type, t_ref) 
+                              param_df[[paste0("km_", soil_type)]] * f_M_Sun(moisture_for_fit, param_df$beta1, s_ws, s_opt) * g_T(t_ref), 
+                              ot$moisture_for_fit, ot$s_ws, ot$s_opt, ot$soil_type, MoreArgs = list(t_ref = t_ref))
+    
+  } else if (fM == 'Kesselmeier') {
+    ot$s_opt <- mapply(function(psi_MPa, b) (psi_MPa / param_df$psi_opt * 1e-3)^(1 / b), ot$Psi_MPa, ot$b)
+    ot$s_ws <- mapply(function(psi_MPa, b) (psi_MPa / param_df$psi_ws * 1e-3)^(1 / b), ot$Psi_MPa, ot$b)
+    
+    ot$predicted_k <- mapply(function(moisture_for_fit, s_ws, s_opt, k_w1, k_w2, soil_type, t_ref) 
+                              param_df[[paste0("km_", soil_type)]] * f_M_Kesselmeier(moisture_for_fit, k_w1, k_w2, s_ws, s_opt) * g_T(t_ref), 
+                              ot$moisture_for_fit, ot$s_ws, ot$s_opt, param_df$k_w1, param_df$k_w2, ot$soil_type, MoreArgs = list(t_ref = t_ref))
+  }
+  
+  return(ot)
+}
+
+```
+
+
+
+## Read in data
+```{r, echo=FALSE}
+data.path = dirname(getwd())
+
+# observations
+dat = read.table(paste0(data.path, "/data/H2_experiments_allData_final.txt"), header=TRUE, sep="\t", check.names = FALSE)
+
+# soil properties
+soil_properties = read.csv(paste0(data.path, "/data/Bertagni.csv"), row.names = 1)
+colnames(soil_properties) = c("Psi..kPa", "b", "n", "sws", "sopt")
+```
+
+## Calculate Theta_w
+
+### water (g) per gram of dry soil (i.e., water lost upon drying/(total soil - water lost upon drying))
+#### soil_g: Mean bulk soil weight in experiment (g)
+
+#### thetaW ~ volumetric moisture per dry soil
+#### thetaW/thetaP ~ % saturation (thetaW/porosity)
+
+```{r}
+dat = dat %>%
+  mutate(thetaW = water_perDrySoil* (soil_g/bulk_vol_soil_ml),
+         s = thetaW/porosity)
+```
+
+## soil moisture prep
+### moisture-psi interconversion functions
+```{r}
+# Psi <-> s
+
+psi_to_moisture <- function(psi,psi_ref,b) {
+  s = (psi / psi_ref)^(-1 / b)
+  return(s)
+}
+
+moisture_to_psi <- function(s,psi_ref,b) {
+    psi = psi_ref * s^(-b)
+    return(psi)
+}
+```
+
+## adjust s based on literature values
+```{r}
+# Define a mapping from soil types to USDA soil classes
+soil_map <- c(Forest = "Sandy Loam", Meadow = "Silt Loam", PB_sand = "Loamy Sand")
+# Reverse mapping
+rsoil_map <- setNames(names(soil_map), soil_map)
+
+soil_properties = soil_properties %>% 
+              mutate(Psi_MPa = `Psi..kPa` / 1e3) %>%  # Convert Psi to MPa 
+              rownames_to_column(var = "soil_type") %>%  # Reset index
+              mutate(soil_type = rsoil_map[soil_type]) %>%  # Map soil types
+              drop_na() %>%  # Remove NA values
+              column_to_rownames(var = "soil_type")
+soil_properties
+
+# estimate psi_ref, b
+
+# Define function to estimate soil moisture given psi
+psi_moisture_opt = function(psi, psi_ref, b) {
+  s = psi_to_moisture(psi, psi_ref, b) - psi_to_moisture(min(psi), psi_ref, b)
+  return(s)
+}
+ 
+## deep copy of dat
+obs = dat
+
+# Filter observations: only use WP between -70 and -0.5
+obsf = obs %>%
+  filter(WP < -0.5, WP > -70)
+
+# Group by soil_type
+groups = split(obsf, obsf$soil_type)
+
+# Initialize a list to store parameters for each soil type
+exp_soil_properties = list()
+
+for (name in names(groups)) {
+  group = groups[[name]]
+  fit = nls(s - min(s) ~ psi_moisture_opt(WP, psi_ref, b), 
+             data = group,
+             start = list(psi_ref = -0.1, b = 0.6),
+             lower = c(psi_ref = -1, b = 0),
+             upper = c(psi_ref = -1e-9, b = 10),
+             algorithm = "port")
+  params <- coef(fit)
+  #exp_soil_properties[[name]] <- c(params["psi_ref"], params["b"])
+  exp_soil_properties[[name]] <- tibble(soil_type = name, Psi_MPa = params["psi_ref"], b = params["b"])
+}
+
+# Convert exp_soil_properties from a list of tibbles to a single tibble
+exp_soil_properties_df <- bind_rows(exp_soil_properties)
+exp_soil_properties_df
+
+# Merge estimated parameters with observed data
+obs = obs %>%
+  left_join(exp_soil_properties_df, by = "soil_type") %>%
+  mutate(s_from_WP = psi_to_moisture(WP, Psi_MPa, b))
+
+# Compute minimum water values per soil type
+min_water = obs %>%
+  group_by(soil_type) %>%
+  summarize(across(c(s_from_WP, s), min, .names = "min_{.col}"), .groups = "drop")
+
+# Apply correction to s values
+obs = obs %>%
+  left_join(min_water, by = "soil_type") %>%
+  mutate(s_corrected = s - min_s + min_s_from_WP) %>%
+  select(-starts_with("min_"))
+```
+
+## plot soil water characteristic curves
+```{r}
+# Define the soil types to plot
+soil_types = c("PB_sand", "Meadow", "Forest")
+
+# Create plots for each soil type
+plots = map(soil_types, function(soil) {
+  
+  # Filter data for the given soil type
+  O = obs %>% filter(soil_type == soil)
+  
+  # Scatter plot of log-transformed WP vs. s
+  p1 = ggplot(O, aes(x = log10(-WP), y = log10(s))) +
+    geom_point() +
+    ggtitle(soil) +
+    theme_minimal()
+  
+  # Filter further for reliable WP range
+  Of = O %>% filter(WP < -0.5, WP > -150)
+  
+  # Scatter plot of log-transformed WP vs. s and s_corrected
+  p2 = ggplot(Of, aes(x = log10(-WP))) +
+    geom_point(aes(y = log10(s), color = "s")) +
+    geom_point(aes(y = log10(s_corrected), color = "s (corrected)")) +
+    labs(x = "-log10(WP)", y = "log10(s)", color = "Legend") +
+    theme_minimal()
+  
+  # Return combined plots
+  p1 / p2  # Stack the two plots vertically
+})
+
+# Combine all plots into a grid
+wrap_plots(plots, ncol = 3) 
+```
+
+## Fit data
+```{r}
+# Define the first-order function
+first_order = function(t, k, H2_0) {
+  return(H2_0 * exp(-k * t))
+}
+
+# Fit function
+fit_generic = function(x, y, ftype) {
+  if (ftype == 'first_order') {
+    # Fit the first-order model
+    fit <- tryCatch({
+      nls(y ~ H2_0 * exp(-k * x), 
+          start = list(k = 0.01, H2_0 = 0.6),
+          lower = c(0, 0),
+          upper = c(Inf, Inf),
+          algorithm = "port")
+    }, error = function(e) return(NULL))
+    
+    if (!is.null(fit)) {
+      params = coef(fit)
+      return(data.frame(k = params['k'], H2_0 = params['H2_0']))
+    }
+  }
+  return(NULL)
+}
+
+# Apply fitting function to the data
+Out_f = obs %>%
+  group_by(soil_type, sample_id, replicate) %>%
+  do({
+    fit_generic(.$time_min, .$h2_ppmv_dil_corr, 'first_order')
+  }) %>%
+  ungroup()
+
+# Rename columns
+Out_f = Out_f %>%
+  rename(k_f = k, H2_0_f = H2_0)
+
+# Merge with observed data at time_min == 0
+O = obs %>% filter(time_min == 0) %>%
+  select(soil_type, sample_id, replicate, h2_ppmv_dil_corr, WP, vol_HS_ml, bulk_vol_soil_ml) #************
+
+OC = left_join(Out_f, O, by = c('soil_type', 'sample_id', 'replicate'))
+
+# Add new calculated columns
+OC = OC %>%
+  mutate(k_f_V = k_f * vol_HS_ml / bulk_vol_soil_ml * 1/60)
+
+# Summary statistics (mean, standard deviation, SEM)
+#OC_g = OC %>%
+  #group_by(soil_type, sample_id) %>%
+  #select_if(is.numeric) %>%
+  #summarise(across(everything(), list(mean = mean, std = sd, sem = ~sd(.)/sqrt(n())), .names = "{.col}_{.fn}"))
+
+OC_g = OC %>%
+  group_by(soil_type, sample_id) %>%
+  mutate(WP_mean = mean(WP),
+         WP_std = sd(WP),
+         WP_sem = WP_std/sqrt(n()),
+         k_f_V_mean = mean(k_f_V),
+         k_f_V_std = sd(k_f_V),
+         k_f_V_sem = k_f_V_std/sqrt(n())
+         )
+
+# Print the result
+# print(OC_g)
+```
+
+
+# plot data and model outputs
+```{r}
+# Prepare Data for Plotting
+moisture <- exp(seq(log(1e-5), 0, length.out = 1000))
+t_ref <- 22 # in C
+k_to_compare = 'k_f_V'
+WP_to_use = 'WP'
+s_to_use = 's_corrected'
+max_WP = -.25
+
+# convert moisture to psi for each soil type 
+psi = list()
+for (st in soil_types) {
+  psi[[st]] <- moisture_to_psi(
+    moisture,
+    exp_soil_properties_df %>% filter(soil_type == st) %>% pull(Psi_MPa),
+    exp_soil_properties_df %>% filter(soil_type == st) %>% pull(b)
+  )
+}
+
+# Ehhalt model
+# ck_ehhalt = list()
+#ck_ehhalt$PB_sand = data.frame(predicted_k = f_M_sand(moisture) * g_T(t_ref))
+#ck_ehhalt$Forest = data.frame(predicted_k = f_M_loam(moisture) * g_T(t_ref))
+
+## convert Ehhalt output to dataframe
+# df_ehhalt = map_dfr(ck_ehhalt, ~ as.data.frame(.x) %>% mutate(model = "Ehhalt"), .id = "soil_type")
+#ls_ehhalt = list()
+#for (st in soil_types[-2]) {
+#  ls_ehhalt[[st]] = data.frame("model" = "Ehhalt", "psi" = psi[[st]], "predicted_k" = #ck_ehhalt[[st]]$predicted_k)
+# }
+# df_ehhalt = map_dfr(ls_ehhalt, ~ as.data.frame(.x), .id="soil_type") %>%
+#  group_by(soil_type) %>%
+#  mutate(pred_k_scaled = predicted_k/max(predicted_k))
+
+# Smith-downey model
+# ck_smith_downey = list()
+# for (st in soil_types) {
+#  ck_smith_downey[[st]] = data.frame (moisture = moisture,
+#  predicted_k = 0.1227 * f_M_smith_downey(moisture) * g_T_smith_downey(t_ref),
+#  ref = 'Smith_Downey')
+# }
+
+## convert Smith-Downey output to dataframe
+# ls_smith_downey = list()
+# for (st in soil_types) {
+#  ls_smith_downey[[st]] = data.frame("model" = "Smith-Downey", "psi" = psi[[st]], "predicted_k" = # ck_smith_downey[[st]]$predicted_k)
+# }
+# df_smith_downey = map_dfr(ls_smith_downey, ~ as.data.frame(.x), .id="soil_type") %>%
+#  group_by(soil_type) %>%
+#  mutate(pred_k_scaled = predicted_k/max(predicted_k))
+
+# bertagni models
+param_bertagni <- data.frame(
+  beta1 = 0.4, psi_ws = -3, psi_opt = -0.3,
+  km_Forest = 0.03, km_Meadow = 0.03, km_PB_sand = 0.03
+)
+param_bertagni_new <- data.frame(
+  beta1 = 1, psi_ws = -100, psi_opt = -0.5,
+  km_Forest = 0.06, km_Meadow = 0.06, km_PB_sand = 0.06
+)
+ck_bertagni <- list()
+ck_bertagni_new <- list()
+
+### Prepare Data for k Calculation
+D = data.frame(moisture_for_fit = moisture)
+for (st in c('Forest', 'Meadow', 'PB_sand')) {
+  D$soil_type = st
+  D$Psi_MPa = exp_soil_properties_df %>% 
+    filter(soil_type == st) %>% 
+    pull(Psi_MPa)
+  D$b = exp_soil_properties_df %>% 
+    filter(soil_type == st) %>% 
+    pull(b)
+  
+  ck_bertagni[[st]] = calc_k_psi_g('Bertagni', param_bertagni, D, t_ref)
+  ck_bertagni_new[[st]] = calc_k_psi_g('Bertagni', param_bertagni_new, D, t_ref)
+}
+
+## convert bertagni outputs to dataframes
+ls_bertagni = list()
+for (st in soil_types) {
+  ls_bertagni[[st]] = data.frame("model" = "-3 MPa", "psi" = psi[[st]], "predicted_k" = ck_bertagni[[st]]$predicted_k)
+}
+df_bertagni = map_dfr(ls_bertagni, ~ as.data.frame(.x), .id="soil_type") %>%
+  group_by(soil_type) %>%
+  mutate(pred_k_scaled = predicted_k/max(predicted_k))
+
+ls_bertagni_new = list()
+for (st in soil_types) {
+  ls_bertagni_new[[st]] = data.frame("model" = "-100 MPa", "psi" = psi[[st]], "predicted_k" = ck_bertagni_new[[st]]$predicted_k)
+}
+df_bertagni_new = map_dfr(ls_bertagni_new, ~ as.data.frame(.x), .id="soil_type") %>%
+  group_by(soil_type) %>%
+  mutate(pred_k_scaled = predicted_k/max(predicted_k))
+```
+
+
+## Plot data and model predictions
+
+```{r}
+# function for symlog transformation
+symlog_trans <- function(threshold = 1) {
+  trans_new("symlog",
+    transform = function(x) sign(x) * log10(1 + abs(x / threshold)),
+    inverse = function(x) sign(x) * threshold * (10^abs(x) - 1),
+    breaks = extended_breaks(),
+    domain = c(-Inf, Inf)
+  )
+}
+
+# plot
+
+OC_g = OC_g %>%
+  group_by(soil_type) %>%
+  mutate(k_f_V_perc = 100*k_f_V/max(k_f_V)) %>%
+  mutate(k_f_V_scaled = k_f_V/max(k_f_V))
+
+ggplot(data = OC_g, aes(x = WP, y = k_f_V_scaled)) +
+  geom_line(data = df_bertagni, aes(x=psi, y=pred_k_scaled, color=soil_type, linetype = model), linewidth = 1) +
+  geom_line(data = df_bertagni_new, aes(x=psi, y=pred_k_scaled, color=soil_type, linetype = model), linewidth = 1) +
+  #geom_line(data= df_ehhalt, aes(x=psi, y=pred_k_scaled, color=soil_type, linetype = model), linewidth = 1) +
+  #geom_line(data= df_smith_downey, aes(x=psi, y=pred_k_scaled, color=soil_type, linetype = model), linewidth = 1) +
+  geom_point(aes(fill=soil_type), size=2.5, shape=21, color="black", stroke=0.3) +
+  scale_x_continuous(trans = symlog_trans(threshold = 1), limits = c(-150, -0.5), breaks = c(-100, -10, -1, -0.01), expand = c(0,0)) +
+  scale_fill_manual(values = c("forestgreen", "gold", "violetred")) +
+  scale_color_manual(values = c("forestgreen", "gold", "violetred")) +
+  scale_linetype_manual(values = c("dotdash", "solid",  "dotted", "longdash")) +
+  xlab(expression(psi)) +
+  theme_minimal() +
+  theme(axis.text = element_text(color="black", size=12))
+```
+
+# save image
+```{r}
+data.path
+# save.image(paste0(data.path, "/data/fitting_models_updated.RData"))
+```
+
+

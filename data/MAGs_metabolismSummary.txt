@@ -1,0 +1,34 @@
+Category	Function	meadow_bin_1	meadow_bin_4	pbs_bin_13	pbs_bin_4	pbs_bin_5	pbs_bin_6	pbs_bin_9	forest_bin_1	forest_bin_13	forest_bin_14	forest_bin_17	forest_bin_2
+Flagellum	FliPQR	0	1	1	1	1	1	1	0	1	0	0	0
+Flagellum	FlgBCFGHIKL	0	0	0.875	1	0.625	0.875	0.875	0	1	0	0	0
+Flagellum	FlhAB	0	0	1	1	0.5	1	0.5	0	1	0	0	0
+Flagellum	flagellin	0	0	0	1	1	1	1	0	1	0	0	0
+Chemotaxis	MotAB	0	0	1	1	1	1	1	0	1	0	0	0
+CAZY	GH5_cellulase	0	0	1	1	1	1	1	0	1	1	1	1
+CAZY	GH13_amylase	1	1	1	1	1	1	1	1	1	1	1	1
+CAZY	GH16_chitinase	1	0	0	0	0	1	1	0	1	1	0	1
+CAZY	GH30_xylanase	0	0	1	0	1	1	1	0	0	0	0	0
+CAZY	GH43_xyloglucanase	1	1	0	0	0	1	0	0	0	1	0	1
+Polyphenols	Polyphenol oxidase	0	0	1	0	1	1	1	1	0	1	0	1
+Polyphenols	Laccase	1	0	0	0	0	0	0	0	0	0	0	0
+Polyphenols	"Catechol 2,3-dioxygenase"	1	0	0	0	1	1	0	1	0	1	0	1
+Osmoprotectant_transport	OpuABCD_glycine betaine	0.333333333	0	0.666666667	1	0.333333333	1	0.666666667	0.666666667	1	1	1	1
+Osmoprotectant_transport	ProVWX_glycine betaine_proline	1	0	0	0	0	0	0	0	0	0	0	0
+CO oxidation	CODH	1	1	0.333333333	1	1	0	0	1	1	0	0	1
+Aerobic_respiration	CydAB	1	1	1	1	1	1	0	0	1	1	1	1
+Aerobic_respiration	CoxABCD	0.5	1	1	0.75	0.25	1	1	0.75	0.75	0.5	0.5	0.5
+Sugar uptake	ThuEFG_trehalose_maltose	1	0	0	0	0.333333333	0.333333333	0	0	0	0	0	0.666666667
+Sugar uptake	XylFGH_xylose	1	0.666666667	0	0	0	0	0	0	0	0.333333333	0	0.666666667
+Sugar uptake	FrcABC_fructose	1	0	0	0	0	0	0	0	0	0	0	0
+Sugar uptake	GluABC_glutamate	1	0	0	0	0	0	0	0	0	0	0	0
+Sugar uptake	RhaPQS1_rhamnose	1	0	0	0	0	0	0	0	0	0	0	1
+Sugar uptake	RbsABC_ribose	1	0	0	1	0	0	1	0	1	0	0	0.666666667
+phylum	NA	p__Actinomycetota	p__Actinomycetota	p__Acidobacteriota	p__Eremiobacterota	p__Acidobacteriota	p__Acidobacteriota	p__Acidobacteriota	p__Acidobacteriota	p__Eremiobacterota	p__Actinomycetota	p__Eremiobacterota	p__Chloroflexota
+class	NA	c__Actinomycetes	c__Acidimicrobiia	c__Terriglobia	c__Eremiobacteria	c__Terriglobia	c__Terriglobia	c__Terriglobia	c__Thermoanaerobaculia	c__Eremiobacteria	c__Acidimicrobiia	c__Eremiobacteria	c__Ktedonobacteria
+order	NA	o__Propionibacteriales	o__Acidimicrobiales	o__Terriglobales	o__Baltobacterales	o__Terriglobales	o__Terriglobales	o__Bryobacterales	o__Multivoradales	o__Baltobacterales	o__Acidimicrobiales	o__Baltobacterales	o__Ktedonobacterales
+family	NA	f__Propionibacteriaceae	f__JACDCH01	f__Acidobacteriaceae	f__Baltobacteraceae	f__Acidobacteriaceae	f__Acidobacteriaceae	f__Bryobacteraceae	f__UBA5704	f__Baltobacteraceae	f__RAAP-2	f__Baltobacteraceae	f__Ktedonobacteraceae
+genus	NA	g__JAJTCL01	g__	g__Granulicella_D	g__Aquilonibacter	g__PALSA-350	g__Occallatibacter	g__Bog-105	g__UBA5704	g__DAIDGS01	g__Bog-473	g__Cybelea	g__Dictyobacter
+species	NA	s__	s__	s__	s__	s__	s__	s__	s__	s__	s__	s__	s__
+completeness	NA	80.13	79.53	77.66	81.07	76.63	77.08	97.39	92.54	98.15	84.52	79.74	93.73
+contamination	NA	5.87	7.15	0.86	0.46	9.96	3.32	9.66	4.27	5.25	4.27	7.51	8.91
+soil_type	NA	Meadow	Meadow	PB sand	PB sand	PB sand	PB sand	PB sand	Forest	Forest	Forest	Forest	Forest

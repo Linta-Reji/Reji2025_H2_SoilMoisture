@@ -1,0 +1,135 @@
+Type	treatment	replicate	WP	Time_min	H2_ppm
+Forest	air-dried	1	-132.4	0	0.877
+Forest	air-dried	1	-132.4	4	0.842
+Forest	air-dried	1	-132.4	10	0.839
+Forest	air-dried	1	-132.4	14	0.775
+Forest	air-dried	1	-132.4	21	0.731
+Forest	air-dried	1	-132.4	32	0.836
+Forest	air-dried	1	-132.4	37	0.765
+Forest	air-dried	1	-132.4	47	0.767
+Forest	air-dried	1	-132.4	53	0.697
+Forest	air-dried	1	-132.4	59	0.754
+Forest	air-dried	1	-132.4	74	0.727
+Forest	air-dried	1	-132.4	93	0.761
+Forest	air-dried	1	-132.4	123	0.737
+Forest	air-dried	1	-132.4	171	0.678
+Forest	air-dried	2	-138.2	0	0.684
+Forest	air-dried	2	-138.2	21	0.647
+Forest	air-dried	2	-138.2	41	0.642
+Forest	air-dried	2	-138.2	70	0.645
+Forest	air-dried	2	-138.2	91	0.643
+Forest	air-dried	2	-138.2	109	0.654
+Forest	air-dried	2	-138.2	130	0.601
+Forest	air-dried	2	-138.2	153	0.623
+Forest	air-dried	3	-140.6	0	0.649
+Forest	air-dried	3	-140.6	20	0.691
+Forest	air-dried	3	-140.6	40	0.706
+Forest	air-dried	3	-140.6	79	0.62
+Forest	air-dried	3	-140.6	92	0.671
+Forest	air-dried	3	-140.6	109	0.636
+Forest	air-dried	3	-140.6	130	0.621
+Forest	air-dried	3	-140.6	152	0.705
+PB_sand	air-dried	1	-118.89	0	0.494
+PB_sand	air-dried	1	-118.89	18	0.529
+PB_sand	air-dried	1	-118.89	33	0.497
+PB_sand	air-dried	1	-118.89	60	0.511
+PB_sand	air-dried	2	-120.69	0	0.517
+PB_sand	air-dried	2	-120.69	16	0.535
+PB_sand	air-dried	2	-120.69	32	0.502
+PB_sand	air-dried	2	-120.69	58	0.522
+PB_sand	air-dried	3	-121.3	0	0.463
+PB_sand	air-dried	3	-121.3	15	0.464
+PB_sand	air-dried	3	-121.3	31	0.475
+PB_sand	air-dried	3	-121.3	57	0.486
+Meadow	air-dried	1	-105.11	0	0.538
+Meadow	air-dried	1	-105.11	30	0.487
+Meadow	air-dried	1	-105.11	68	0.526
+Meadow	air-dried	1	-105.11	102	0.6
+Meadow	air-dried	1	-105.11	129	0.539
+Meadow	air-dried	2	-114.44	0	0.589
+Meadow	air-dried	2	-114.44	30	0.489
+Meadow	air-dried	2	-114.44	72	0.553
+Meadow	air-dried	2	-114.44	101	0.59
+Meadow	air-dried	2	-114.44	128	0.485
+Meadow	air-dried	3	-113.9	0	0.519
+Meadow	air-dried	3	-113.9	30	0.492
+Meadow	air-dried	3	-113.9	72	0.544
+Meadow	air-dried	3	-113.9	100	0.501
+Meadow	air-dried	3	-113.9	128	0.482
+Meadow	autoclaved	1	NA	0	0.568
+Meadow	autoclaved	1	NA	30	0.534
+Meadow	autoclaved	1	NA	59	0.556
+Meadow	autoclaved	1	NA	105	0.518
+Meadow	autoclaved	2	NA	0	0.507
+Meadow	autoclaved	2	NA	25	0.596
+Meadow	autoclaved	2	NA	54	0.585
+Meadow	autoclaved	2	NA	100	0.595
+Meadow	autoclaved	3	NA	0	0.561
+Meadow	autoclaved	3	NA	12	0.617
+Meadow	autoclaved	3	NA	42	0.55
+Meadow	autoclaved	3	NA	86	0.608
+Forest	autoclaved	1	NA	0	0.619
+Forest	autoclaved	1	NA	20	0.596
+Forest	autoclaved	1	NA	45	0.622
+Forest	autoclaved	1	NA	95	0.611
+Forest	autoclaved	1	NA	130	0.633
+Forest	autoclaved	2	NA	0	0.615
+Forest	autoclaved	2	NA	20	0.591
+Forest	autoclaved	2	NA	45	0.612
+Forest	autoclaved	2	NA	95	0.622
+Forest	autoclaved	2	NA	131	0.609
+Forest	autoclaved	3	NA	0	0.592
+Forest	autoclaved	3	NA	20	0.61
+Forest	autoclaved	3	NA	45	0.601
+Forest	autoclaved	3	NA	94	0.59
+Forest	autoclaved	3	NA	131	0.587
+PB sand	autoclaved	1	NA	0	0.556
+PB sand	autoclaved	1	NA	40	0.499
+PB sand	autoclaved	1	NA	79	0.515
+PB sand	autoclaved	1	NA	115	0.502
+PB sand	autoclaved	2	NA	0	0.528
+PB sand	autoclaved	2	NA	39	0.526
+PB sand	autoclaved	2	NA	80	0.548
+PB sand	autoclaved	2	NA	115	0.524
+PB sand	autoclaved	3	NA	0	0.48
+PB sand	autoclaved	3	NA	38	0.49
+PB sand	autoclaved	3	NA	80	0.5
+PB sand	autoclaved	3	NA	115	0.496
+Control	empty	1	NA	0	0.743
+Control	empty	1	NA	8	0.746
+Control	empty	1	NA	16	0.743
+Control	empty	1	NA	25	0.751
+Control	empty	1	NA	41	
+Control	empty	1	NA	59	0.744
+Control	empty	1	NA	76	0.802
+Control	empty	1	NA	80	0.8
+Control	empty	1	NA	119	0.743
+Control	empty	1	NA	136	0.721
+Control	empty	1	NA	230	0.73
+Control	empty	2	NA	0	0.746
+Control	empty	2	NA	17	0.805
+Control	empty	2	NA	33	0.666
+Control	empty	2	NA	52	0.733
+Control	empty	2	NA	75	0.733
+Control	empty	2	NA	93	0.698
+Control	empty	2	NA	118	0.685
+Control	empty	2	NA	155	0.794
+Control	empty	3	NA	0	0.743
+Control	empty	3	NA	8	0.746
+Control	empty	3	NA	16	0.743
+Control	empty	3	NA	24	0.751
+Control	empty	3	NA	38	0.779
+Control	empty	3	NA	56	0.744
+Control	empty	3	NA	73	0.802
+Control	empty	3	NA	77	0.8
+Control	empty	3	NA	95	0.717
+Control	empty	3	NA	116	0.743
+Control	empty	3	NA	133	0.721
+Control	empty	3	NA	227	0.73
+Control	empty	4	NA	0	0.582
+Control	empty	4	NA	6	0.552
+Control	empty	4	NA	16	0.589
+Control	empty	4	NA	27	0.574
+Control	empty	4	NA	49	0.588
+Control	empty	4	NA	57	0.611
+Control	empty	4	NA	68	0.618

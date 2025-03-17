@@ -1,0 +1,582 @@
+---
+title: "H2_uptakeRates_final"
+output: html_document
+date: "2024-12-05"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+### Load libraries:
+```{r, echo=FALSE, message=FALSE}
+library(tidyverse)
+library(ggplot2)
+library(ggpmisc)
+library(patchwork)
+```
+
+### Read in data:
+
+```{r, echo=FALSE}
+data.path = dirname(getwd())
+dat = read.table(paste0(data.path, "/data/H2_experiments_allData_final.txt"), header=TRUE, sep="\t", check.names = FALSE)
+```
+
+### Calculate percent saturation as volumetric moisture% * porosity:
+
+```{r}
+dat = dat %>%
+  mutate(percSat = volumetric_moisture_perDrySoil_rhoW/porosity)
+```
+
+### Filter out air-dried samples before estimating uptake rates
+```{r}
+dat_ed = dat %>% 
+  filter(sample_id != "air-dried")
+
+# select variables of interest
+dat_ed = dat_ed %>%
+  select(soil_type, sample_id, replicate, soil_g, measured_percS, WP, volumetric_moisture_perDrySoil_rhoW, percSat, time_min, h2_ppmv_dil_corr)
+```
+
+### Define and apply an exponential decay function:
+```{r}
+uptake.fun <- function(t, init, k) (init*exp(-k*t))
+# k = bacterial uptake rate; t = time in min; init = starting concentration
+
+# apply function to each soil type separately:
+dat.models = dat_ed %>%
+  group_by(soil_type, sample_id, replicate, soil_g, measured_percS, WP, volumetric_moisture_perDrySoil_rhoW, percSat) %>% nest() %>%
+  mutate(model = purrr::map(data, ~nls(h2_ppmv_dil_corr ~ uptake.fun(time_min, h2_ppmv_dil_corr[1], k1), data=., start=list(k1=0.001))),
+         model_summaries = map(model, broom::glance),
+         model_coef = map(model, broom::tidy))
+
+# get a df with estimated k values
+k_estimates = dat.models %>%  
+  unnest(model_coef, .drop = TRUE) %>%
+  select(soil_type, sample_id, replicate, soil_g, measured_percS, WP, volumetric_moisture_perDrySoil_rhoW, percSat, estimate, std.error)
+
+# combine k estimates and the initial df for plotting
+
+# get initial H2 concentrations
+init_ppms = dat_ed %>%
+  group_by(soil_type, sample_id, replicate) %>%
+  summarise(init = first(h2_ppmv_dil_corr))
+
+# combine initial concentrations with rate constant estimates
+dat.k.init = left_join(k_estimates, init_ppms)
+
+# add rate constant estimates and initial concentrations to the original df
+dat.combined = left_join(dat_ed, dat.k.init)
+```
+
+
+### estimate curves and plot each soil type separately: 
+```{r}
+# calculate mean %S for plotting replicates together:
+dat.combined = dat.combined %>%
+  group_by(soil_type, sample_id) %>%
+  mutate(mean_percSat = round(100*mean(percSat), 1))
+
+# forest soil curves
+dat.combined %>%
+  filter(soil_type == "Forest") %>%
+  group_by(sample_id, replicate) %>%
+  mutate(pred = uptake.fun(time_min, init, estimate)) %>%
+  ggplot(aes(x=time_min, color = factor(replicate), label = paste0("-k = ", round(estimate,3)))) +
+  geom_point(aes(y=h2_ppmv_dil_corr), size = 1.5) +
+  facet_wrap(~mean_percSat, scales = "free_x", ncol = 2) +
+  geom_text(data = (dat.combined %>% filter(soil_type == "Forest" & replicate == 1)), x=45, y=0.5, check_overlap = TRUE) +
+  geom_text(data = (dat.combined %>% filter(soil_type == "Forest" & replicate == 2)), x=45, y=0.5, check_overlap = TRUE, vjust=2) +
+  geom_text(data = (dat.combined %>% filter(soil_type == "Forest" & replicate == 3)), x=45, y=0.5, check_overlap = TRUE, vjust=4) +
+  # or use geom_line but gives weird looking line.
+  # geom_line(aes(y= pred, group = replicate), size=0.5) +
+  geom_smooth(aes(y= pred, group = replicate), size=0.5, se=FALSE) +
+  theme_linedraw() +
+  scale_color_manual(values = c("#118dd5", "#d5118d", "#62940c")) +
+    theme(strip.text = element_text(size = 14),
+        axis.title = element_text(color="black", size=12),
+        axis.text = element_text(color="black", size=11)) +
+  xlab("Time (min)") +
+  ylab("Headspace H2 ppmv")
+
+# meadow soil curves
+dat.combined %>%
+  filter(soil_type == "Meadow") %>%
+  group_by(sample_id, replicate) %>%
+  mutate(pred = uptake.fun(time_min, init, estimate)) %>%
+  ggplot(aes(x=time_min, color = factor(replicate), label = paste0("-k = ", round(estimate,3)))) +
+  geom_point(aes(y=h2_ppmv_dil_corr), size = 1.5) +
+  facet_wrap(~mean_percSat, scales = "free_x", ncol = 2) +
+  geom_text(data = (dat.combined %>% filter(soil_type == "Meadow" & replicate == 1)), x=45, y=0.5, check_overlap = TRUE) +
+  geom_text(data = (dat.combined %>% filter(soil_type == "Meadow" & replicate == 2)), x=45, y=0.5, check_overlap = TRUE, vjust=2) +
+  geom_text(data = (dat.combined %>% filter(soil_type == "Meadow" & replicate == 3)), x=45, y=0.5, check_overlap = TRUE, vjust=4) +
+  geom_smooth(aes(y= pred, group = replicate), size=0.5, se=FALSE) +
+  theme_linedraw() +
+  scale_color_manual(values = c("#118dd5", "#d5118d", "#62940c")) +
+    theme(strip.text = element_text(size = 14),
+        axis.title = element_text(color="black", size=12),
+        axis.text = element_text(color="black", size=11)) +
+  xlab("Time (min)") +
+  ylab("Headspace H2 ppmv")
+
+# PB sand curves
+dat.combined %>% filter(sample_id != 1.5) %>%
+  filter(soil_type == "PB_sand") %>%
+  group_by(sample_id, replicate) %>%
+  mutate(pred = uptake.fun(time_min, init, estimate)) %>%
+  ggplot(aes(x=time_min, color = factor(replicate), label = paste0("-k = ", round(estimate,3)))) +
+  geom_point(aes(y=h2_ppmv_dil_corr), size = 1.5) +
+  facet_wrap(~mean_percSat, scales = "free_x", ncol = 3) +
+  geom_text(data = (dat.combined %>% filter(sample_id != 1.5 & soil_type == "PB_sand" & replicate == 1)), x=45, y=0.5, check_overlap = TRUE) +
+  geom_text(data = (dat.combined %>% filter(sample_id != 1.5 & soil_type == "PB_sand" & replicate == 2)), x=45, y=0.5, check_overlap = TRUE, vjust=2) +
+  geom_text(data = (dat.combined %>% filter(sample_id != 1.5 & soil_type == "PB_sand" & replicate == 3)), x=45, y=0.5, check_overlap = TRUE, vjust=4) +
+  # or use geom_line but gives weird looking line.
+  geom_smooth(aes(y= pred, group = replicate), size=0.5, se=FALSE) +
+  theme_linedraw() +
+  scale_color_manual(values = c("#118dd5", "#d5118d", "#62940c")) +
+  theme(strip.text = element_text(size = 14),
+        axis.title = element_text(color="black", size=12),
+        axis.text = element_text(color="black", size=11)) +
+  xlab("Time (min)") +
+  ylab("Headspace H2 ppmv")
+  
+```
+
+
+### prep new df to include air-dried samples
+```{r}
+# new df with air-dried samples, set estimate to 0
+df_airdried = dat %>% filter(sample_id == "air-dried") %>%
+  select(soil_type, sample_id, replicate, soil_g, measured_percS, WP, volumetric_moisture_perDrySoil_rhoW, percSat, time_min, h2_ppmv_dil_corr) %>%
+  mutate(estimate = 0,
+         std.error = 0)
+
+# calculate mean %S for plotting replicates together:
+df_airdried = df_airdried %>%
+  group_by(soil_type, sample_id) %>%
+  mutate(mean_percSat = round(100*mean(percSat), 1))
+
+# extract initial H2 concentrations into a new column
+init_airdried = df_airdried %>%  
+  group_by(soil_type, replicate) %>%
+  summarise(init = first(h2_ppmv_dil_corr))
+
+df_airdried = left_join(df_airdried, init_airdried)
+
+```
+
+### plot air-dried measurements
+```{r}
+# estimated measurement error (standard error in the mean) = 0.17 ppm
+
+df_airdried %>%
+  filter(sample_id == "air-dried") %>%
+  ggplot(aes(x=time_min, y = h2_ppmv_dil_corr)) +
+  geom_point(aes(colour = as.factor(replicate))) +
+  geom_errorbar(aes(ymin = h2_ppmv_dil_corr-0.17, ymax = h2_ppmv_dil_corr+0.17, width = 0.002), color="lightgray") +
+  facet_grid(~mean_percSat, scales = "free") +
+  ylab("H2 ppmv") +
+  xlab("Time (min)")
+  
+```
+
+
+--- scaled plots
+
+scale rate estimates for differences in soil quantity:
+
+# scale estimates by soil bulk weight, and plot
+```{r}
+dat.combined_ed = dat.combined
+dat.combined_ed$sample_id = as.character(dat.combined_ed$sample_id)
+dat.combined_ed = bind_rows(dat.combined_ed, df_airdried)
+
+dat.combined_scaled = dat.combined_ed %>%
+  # set estimate =0 for PB_sand 1.5% samples since actual uptake is ~0
+  mutate(estimate = ifelse(sample_id == 1.5, 0, estimate)) %>%
+  # scaling for soil weight
+  mutate(estimate_gSoil = estimate/soil_g)
+
+# plots: scaled estimates for all three soils:
+
+# k scaled to soil bulk weight vs. measured volumetric %S
+dat.combined_scaled %>%
+  group_by(soil_type, sample_id) %>%
+  mutate(mean_k_gSoil = mean(estimate_gSoil),
+         std_k = sd(estimate_gSoil),
+         mean_volS = mean(volumetric_moisture_perDrySoil_rhoW),
+         std_volS = sd(volumetric_moisture_perDrySoil_rhoW)) %>%
+  ggplot(aes(x=mean_volS, y=mean_k_gSoil)) +
+  geom_errorbar(aes(ymin = mean_k_gSoil-std_k, ymax = mean_k_gSoil + std_k, width = 0.002), color="black") +
+  geom_errorbar(aes(xmin = mean_volS-std_volS, xmax = mean_volS+std_volS, width = 0.002), color="black") +
+  geom_point(size=3, aes(shape = soil_type, color = soil_type)) +
+  scale_color_manual(values = c("forestgreen", "gold", "violetred")) +
+  theme_linedraw() +
+  ggtitle("k scaled by g-soil versus mean volumetric %S") +
+  ylab("k (min-1 gSoil-1") +
+  xlab("Mean volumetric %S (cm3 water-filled pores/cm3 soil)")
+
+# mean %saturation vs. mean k
+dat.combined_scaled %>% 
+  group_by(soil_type, sample_id) %>%
+  # filter(sample_id != 7) %>%
+  mutate(mean_k_gSoil = mean(estimate_gSoil),
+         std_k = sd(estimate_gSoil),
+         std_percSat = sd(percSat)) %>%
+  ggplot(aes(x=mean_percSat, y=mean_k_gSoil)) +
+  geom_errorbar(aes(ymin = mean_k_gSoil-std_k, ymax = mean_k_gSoil + std_k, width = 0.002), color="black") +
+  geom_errorbar(aes(xmin = mean_percSat-std_percSat, xmax = mean_percSat+std_percSat, width = 0.002), color="black") +
+  geom_point(size=3, aes(shape = soil_type, color = soil_type)) +
+  scale_color_manual(values = c("forestgreen", "gold", "violetred")) +
+  theme_linedraw() +
+  ggtitle("k scaled by g-soil versus mean volumetric %S") +
+  ylab("k (min-1 gSoil-1") +
+  xlab("%Saturation")
+
+# %saturation vs. k (replicates separately)
+dat.combined_scaled %>% 
+  group_by(soil_type, sample_id) %>%
+  filter(sample_id != 7) %>%
+  ggplot(aes(x=percSat, y=estimate_gSoil)) +
+  geom_point(size=3, aes(shape = soil_type, color = soil_type)) +
+  scale_color_manual(values = c("forestgreen", "gold", "violetred")) +
+  theme_linedraw() +
+  ggtitle("k scaled by g-soil versus volumetric %S") +
+  ylab("k (min-1 gSoil-1") +
+  xlab("%Saturation")
+
+(dat.combined_scaled %>% filter(soil_type == "Forest"))$percSat %>% 
+  round(.,2) %>% as.factor() %>% levels()
+```
+
+
+# plot water potential vs. SCALED k estimates
+```{r}
+# log10(WP) vs. mean_k
+dat.combined_scaled %>%
+  group_by(soil_type, sample_id) %>%
+  mutate(mean_WP = mean(log10(abs(WP))),
+         std_WP = sd(log10(abs(WP))),
+         mean_k_gSoil = mean(estimate_gSoil),
+         std_k_gSoil = sd(estimate_gSoil)
+         ) %>%
+  ggplot(aes(x=mean_WP, y=mean_k_gSoil)) +
+  geom_errorbar(aes(xmin = mean_WP-std_WP, xmax = mean_WP + std_WP), color="darkblue") +
+  geom_errorbar(aes(ymin = mean_k_gSoil-std_k_gSoil, ymax = mean_k_gSoil + std_k_gSoil), color="darkblue") +
+  geom_point(aes(color=soil_type), size=2.5) +
+  theme_light() +
+  xlab("Log10(water potential)") +
+  ylab("Mean k (min-1 gSoil-1") +
+  ggtitle("k scaled by g-soil versus Log10(WP)") +
+  scale_color_manual(values = c("forestgreen", "gold", "violetred")) +
+  scale_x_reverse() +
+  theme(axis.title = element_text(color="black", size=12),
+        axis.text = element_text(color="black", size=12),
+        legend.title = element_blank())  
+
+# raw WP vs. mean k
+dat.combined_scaled %>%
+  group_by(soil_type, sample_id) %>%
+  mutate(mean_WP = mean(WP),
+         std_WP = sd(WP),
+         mean_k_gSoil = mean(estimate_gSoil),
+         std_k_gSoil = sd(estimate_gSoil)
+         ) %>%
+  ggplot(aes(x=mean_WP, y=mean_k_gSoil)) +
+  geom_errorbar(aes(xmin = mean_WP-std_WP, xmax = mean_WP + std_WP), color="darkblue") +
+  geom_errorbar(aes(ymin = mean_k_gSoil-std_k_gSoil, ymax = mean_k_gSoil + std_k_gSoil), color="darkblue") +
+  geom_point(aes(color=soil_type), size=3) +
+  theme_light() +
+  xlab("water potential") +
+  ylab("Mean k (min-1 gSoil-1") +
+  ggtitle("k scaled by g-soil versus WP") +
+  scale_color_manual(values = c("forestgreen", "gold", "violetred")) +
+  theme(axis.title = element_text(color="black", size=12),
+        axis.text = element_text(color="black", size=11),
+        legend.title = element_blank())
+```
+
+## Table 1: air-dried vs. activation thresholds
+```{r}
+out.path = dirname(getwd()) 
+out.path
+dat.combined_scaled %>%
+  group_by(soil_type, sample_id) %>%
+  mutate(mean_moist = mean(percSat)) %>%
+  filter(sample_id %in% c(2, 3.5, 7, "air-dried")) %>%
+  select(sample_id, replicate, WP, measured_percS, percSat) %>%
+  distinct()
+  #write.table(file = paste0(out.path, "/data/Table1_activationThresholds.txt", quote = FALSE, sep = "\t", row.names = FALSE)
+
+```
+
+### scale by OM content, SOC
+
+Add LOI and SOC (g/g) to the df
+```{r}
+# add mean %LOI and sd to the df:
+dat.combined.soc = dat.combined_scaled %>%
+  mutate(LOI = 
+           case_when(soil_type == "Forest" ~ 37.18,
+                     soil_type == "Meadow" ~ 12.69,
+                     soil_type == "PB_sand" ~ 3.29 ),
+         LOI_sd = 
+           case_when(soil_type == "Forest" ~ 1.55,
+                     soil_type == "Meadow" ~ 0.22,
+                     soil_type == "PB_sand" ~ 0.11 )
+         )
+
+# convert LOI to SOC (g/g)
+dat.combined.soc = dat.combined.soc %>%
+  mutate(SOC_gPg = (LOI/100)*0.58,
+         SOC_gPg_sd = LOI_sd * (0.58/100)
+         )
+```
+
+plot k (min-1 gSoil-1) vs. SOC(g/g)
+```{r}
+dat.combined.soc = dat.combined.soc %>%
+  mutate(k_gSOC = estimate_gSoil/(SOC_gPg),
+         k_gSOC_sd = k_gSOC * (SOC_gPg_sd/SOC_gPg))
+
+# plot k (min-1 gSOC-1) vs. mean_percSat
+dat.combined.soc %>% 
+  group_by(soil_type, sample_id) %>%
+  mutate(
+    mean_k_gSOC = mean(k_gSOC),
+    n_samples = n(),
+    se_k_gSOC = sd(k_gSOC) / sqrt(n()),
+    se_percSat = sd(percSat)/ sqrt(n())) %>%
+  ggplot(aes(x=mean_percSat, y=mean_k_gSOC)) +
+  geom_errorbar(aes(ymin = mean_k_gSOC-se_k_gSOC, ymax = mean_k_gSOC+se_k_gSOC), width=0.3,  color="black") +
+  geom_errorbar(aes(xmin = mean_percSat-se_percSat, xmax = mean_percSat+se_percSat), width = 0.03, color="black") +
+  geom_point(size=3, aes(shape = soil_type, color = soil_type)) +
+  scale_color_manual(values = c("forestgreen", "gold", "violetred")) +
+  theme_linedraw() +
+  ylab(expression(k ~ (min^-1 ~ SOC^-1))) +
+  xlab("%Saturation")
+```
+Compare to max(k (min-1 gsoil-1)) vs. SOC
+```{r}
+dat.combined.soc %>%
+  group_by(soil_type) %>%
+  mutate(max_k_gSoil = max(estimate_gSoil)) %>%
+  select(SOC_gPg, SOC_gPg_sd, max_k_gSoil) %>%
+  # unique() %>%
+  ggplot(aes(x=SOC_gPg, y=max_k_gSoil)) +
+  geom_errorbar(aes(xmin = SOC_gPg-SOC_gPg_sd, xmax = SOC_gPg+SOC_gPg_sd), width = 0.003, color="black") +
+  geom_point(size=3, aes(shape = soil_type, color = soil_type)) +
+  scale_color_manual(values = c("forestgreen", "gold", "violetred")) +
+  theme_linedraw() +
+  ggtitle("k_max (min-1 gSoil-1) versus SOC (g/g)") +
+  ylab("k_max (min-1 gSoil-1") +
+  xlab("SOC (g/g)")
+```
+
+
+### add HA-HOB relative abundance estimates to the df
+### plot HA-HOB abundance vs. SOC
+```{r}
+dat.combined.soc = dat.combined.soc %>%
+  mutate(HOB = case_when(soil_type=="Forest" ~ 34,
+                         soil_type=="Meadow" ~ 24,
+                         soil_type=="PB_sand" ~ 40),
+         # Overall SE estimated as sqrt(sum(se^2)/n)
+         HOB_err=case_when(soil_type=="Forest" ~ 0.85,
+                         soil_type=="Meadow" ~ 0.79,
+                         soil_type=="PB_sand" ~ 1.03))
+
+dat.combined.soc %>%
+  ggplot(aes(x=SOC_gPg, y=HOB)) +
+  geom_errorbar(aes(ymin = HOB-HOB_err, ymax=HOB+HOB_err, width=0.002)) +
+  geom_errorbar(aes(xmin = SOC_gPg-SOC_gPg_sd, xmax=SOC_gPg+SOC_gPg_sd, width=0.002)) +
+  geom_point(aes(color=soil_type)) +
+  xlab("SOC (g/g)") +
+  ylab("HOB (%)") +
+  ggtitle("HOB (%) vs. SOC (g/g)") 
+```
+
+### %HOB normalized by SOC(g/g) vs. max(k (min-1 gSoil-1))
+```{r}
+# k-max vs %HOB
+dat.combined.soc %>%
+  # dplyr::filter(!(soil_type == "PB_sand" & soil_g ==2)) %>%
+  group_by(soil_type) %>%
+  mutate(k_max_gSoil = max(estimate_gSoil)) %>%
+  mutate(HOB_gSOC = HOB/(100*SOC_gPg),
+         HOB_gSOC_err = HOB_gSOC * sqrt( (HOB_err/HOB)^2 + (SOC_gPg_sd/SOC_gPg)^2 ) ) %>%
+  ggplot(aes(x=HOB_gSOC, y=k_max_gSoil)) +
+  geom_errorbar(aes(xmin = HOB_gSOC-HOB_gSOC_err, xmax=HOB_gSOC+HOB_gSOC_err, width=0.002)) +
+  geom_point(aes(color=soil_type)) +
+  ylab("k-max (min-1 gSoil-1)") +
+  xlab("Normalized HOB (%) / SOC (g/g)") +
+  ggtitle("HOB abundance normalized by SOC")
+```
+
+### SOC vs. k_max:
+### deduce a functional form
+
+#### 1. quadratic fit (overfitting)
+```{r}
+# k vs soc
+dat.combined.soc %>%
+  # filter out PB_sand experiments w/ 2g soil (1-set of samples) since k-max was inferred for 4g
+  dplyr::filter(!(soil_type == "PB_sand" & soil_g ==2)) %>%
+  mutate(max_k_gSoil = max(estimate_gSoil)) %>%
+  select(SOC_gPg, SOC_gPg_sd, max_k_gSoil) %>%
+  ggplot(aes(x=SOC_gPg100, y=max_k_gSoil)) +
+  geom_point(aes(color=soil_type), size=3)
+
+# try fitting a quadratic model:
+soc_g = dat.combined.soc %>%
+  dplyr::filter(!(soil_type == "PB_sand" & soil_g ==2)) %>% 
+  dplyr::pull(SOC_gPg)
+
+k_max_g = dat.combined.soc %>%
+  dplyr::filter(!(soil_type == "PB_sand" & soil_g ==2)) %>%
+  dplyr::mutate(max_k_gSoil = max(estimate_gSoil)) %>%
+  dplyr::pull(max_k_gSoil)
+k_max_g %>% unique()
+
+quad_mod = lm(k_max_g ~ soc_g + I(soc_g^2))
+summary(quad_mod)
+
+coef(quad_mod)[1]
+
+# Plot the original data
+plot(soc_g, k_max_g, main = "Quadratic Fit", pch = 19, col = "blue")
+
+# Add the fitted quadratic curve
+curve(coef(quad_mod)[1] + coef(quad_mod)[2] * x + coef(quad_mod)[3] * x^2, 
+      from = min(soc_g), to = max(soc_g), 
+      add = TRUE, col = "red", lwd = 2)
+
+# extract coefficients
+coefs = coef(quad_mod)
+
+intercept = coefs[1]
+linear_coef = coefs[2]
+quadratic_coef = coefs[3]
+
+# plot using ggplot
+data.frame(soc_g = soc_g, k_max_g = k_max_g) %>%
+  ggplot(aes(x = soc_g, y = k_max_g)) +
+  geom_point(color = "blue", size = 3) +
+  stat_smooth(method = "lm", formula = y ~ poly(x, 2), color = "red", se = FALSE, lwd = 1.5) +
+  annotate("text", x = max(soc_g) * 0.7, y = max(k_max_g) * 0.8, 
+           label = paste("k_max = ", round(intercept, 2), round(linear_coef, 3), "SOC(g/g) + ", round(quadratic_coef, 3), "SOC(g/g)²", sep = ""),
+           color = "black", size = 4, hjust = 0.8) +
+  labs(title = "Quadratic Fit", x = "SOC (g/g)", y = "k_max (min-1 gSoil-1)") +
+  theme_minimal()
+
+```
+
+#### 2. linear fit
+```{r}
+dat.combined.soc %>%
+  dplyr::filter(!(soil_type == "PB_sand" & soil_g ==2)) %>%
+  group_by(soil_type) %>%
+  mutate(k_max = max(estimate_gSoil)) %>%
+  ggplot(aes(x=SOC_gPg*100, y=k_max)) +
+  geom_errorbar(aes(xmin = SOC_gPg*100-SOC_gPg_sd*100, xmax=SOC_gPg*100+SOC_gPg_sd*100, width=0.002)) +
+  geom_point(aes(color=soil_type), size=3) +
+  geom_smooth(method="lm", se=FALSE, color="black") +
+  stat_poly_eq(aes(label = paste(..eq.label.., paste0("R^2== ",..r.squared..), sep = "~~~~")),
+               formula = y ~ x, 
+               parse = TRUE, color="black", size=4) +
+  scale_color_manual(values = c("forestgreen", "gold", "violetred")) +
+  xlab("SOC %") +
+  #ylab("k max (min-1 gSoil-1)") +
+  ylab(expression(kmax ~ (min^-1 ~ gSoil^-1))) +
+  theme_linedraw()
+
+# linear fit: max(k) vs SOC(g/g) --> y=0.00387 + 0.24x (r-sq: 0.96)
+```
+
+### relationship between k_max and %HOB * SOC(g/g)
+```{r}
+# HOB*(SOC) is a proxy for the proportion of SOC that's associated with HOB
+
+dat.combined.soc %>%
+  # filter out PB_sand experiments w/ 2g soil (1-set of samples) since k-max was inferred for 4g
+  dplyr::filter(!(soil_type == "PB_sand" & soil_g ==2)) %>%
+  group_by(soil_type) %>%
+  mutate(k_max = max(estimate_gSoil)) %>%
+  ggplot(aes(y=k_max, x=(HOB/100)*SOC_gPg)) +
+  geom_point(aes(color=soil_type), size=3) +
+  geom_smooth(method="lm", se=FALSE, color="black") +
+  stat_poly_eq(aes(label = paste(..eq.label.., ..r.squared.., sep = "~~~")),
+               formula = y ~ x, 
+               parse = TRUE, color="black", size=4) +
+  xlab("HOB * SOC(g/g)") +
+  ylab("k max (min-1 gSoil-1)") +
+  ggtitle("Fraction of SOC that's HOB vs. max(k)")
+
+# range of SOC in our dataset:
+dat.combined.soc %>% 
+  group_by(soil_type) %>%
+  select(SOC_gPg) %>%
+  unique()
+```
+
+## plot all controls
+```{r}
+# read in control sample data
+controls_df = read.table(paste0(data.path, "/data/H2_expt_controls_forPlotting.txt"), header=TRUE, sep="\t", check.names = FALSE)
+
+# plot airdried samples:
+airdried_plot = controls_df %>%
+  filter(treatment=="air-dried") %>%
+  ggplot(aes(x=Time_min, y=H2_ppm)) +
+  geom_point(aes(color=as.factor(replicate), shape=Type), size=2) +
+  scale_shape_manual(values = c(16,17,15)) +
+  scale_color_manual(name = "Replicate", values = c("#264653", "#2A9D8F", "#E76F51")) +
+  ylim(c(0,0.9)) + 
+  xlab("Time (min)") +
+  ylab("H2 (ppmv)") +
+  theme_minimal()
+
+# plot empty controls and autoclaved soils:
+more_controls_plot = controls_df %>%
+  filter(treatment!="air-dried") %>%
+  ggplot(aes(x=Time_min, y=H2_ppm)) +
+  geom_point(aes(color=as.factor(replicate), shape=Type), size=2) +
+  scale_shape_manual(values = c(14,16,17,15)) +
+  scale_color_manual(name = "Replicate", values = c("#264653", "#2A9D8F", "#E76F51", "#F4A261")) +
+  ylim(c(0,0.8)) +
+  xlab("Time (min)") +
+  ylab("H2 (ppmv)") +
+  theme_minimal()
+
+# combine the plots:
+airdried_plot + more_controls_plot +
+  plot_annotation(tag_levels = 'a')
+```
+
+#### write estimates to file
+```{r}
+# colnames(dat.combined_scaled)
+# dat.combined_scaled = dat.combined_scaled %>% select(-std.error, -init)
+
+# the two df are in different row orders. 
+# variables to merge the dfs with:
+# join_vars = c("soil_type", "sample_id", "replicate", "soil_g", "measured_percS", "WP", "volumetric_moisture_perDrySoil_rhoW", "thetaW_thetaP", "time_min", "h2_ppmv_dil_corr")
+
+# dat_updated = merge(dat, dat.combined_scaled, by=join_vars)
+# dim(dat_updated)
+
+# write.table(dat_updated, file=paste0(data.path, "/H2_experiments_allData_withEstimates.txt"), sep = "\t", quote = FALSE, row.names = FALSE)
+
+```
+
+# save image
+```{r}
+# data.path = dirname(getwd())
+# data.path
+# save.image(paste0(data.path, "/data/H2_uptakeRates_final.RData"))
+```
+
+

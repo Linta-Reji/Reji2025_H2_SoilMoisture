@@ -1,0 +1,19 @@
+user_genome,domain,phylum,class,order,family,genus,species,red_value,completeness,contamination,strain_heterogeneity,F_6_rpkm,F_10_rpkm,F_40_rpkm,F_orig_30_rpkm,FS_30_rpkm,hydrogenase,hyd_type_group,hyd_affinity,F_6_MT_tpm,F_10_MT_tpm,F_orig_30_MT_tpm,F_40_MT_tpm
+forest_bin_1,d__Bacteria,p__Acidobacteriota,c__Thermoanaerobaculia,o__Multivoradales,f__UBA5704,g__UBA5704,s__,0.91188,92.54,4.27,20,21.9,7.4,5.1,5.1,6.2,yes,"NiFe_1h, FeFe_C3",HA,439848.2,429298.66,593027.44,538273.8
+forest_bin_10,d__Archaea,p__Thermoproteota,c__Nitrososphaeria,o__Nitrososphaerales,f__Nitrososphaeraceae,g__Nitrosopolaris,s__,0.98322,83.29,6.8,0,7.6,7,3.1,4.3,5,no,NA,NA,0,0,0,0
+forest_bin_11,d__Bacteria,p__Desulfobacterota_B,c__Binatia,o__Binatales,f__Binataceae,g__JAFAHS01,s__,0.98527,70.91,7.52,0,4.3,4,3.1,2.9,4.4,no,NA,NA,0,0,0,0
+forest_bin_12,d__Bacteria,p__Acidobacteriota,c__Terriglobia,o__Terriglobales,f__SbA1,g__Sulfotelmatobacter,s__,0.9672,80.93,8.97,27.27,9.9,7.6,18.4,15.4,17.7,yes,"NiFe_1c, NiFe_3d",NA,0,0,0,0
+forest_bin_13,d__Bacteria,p__Eremiobacterota,c__Eremiobacteria,o__Baltobacterales,f__Baltobacteraceae,g__DAIDGS01,s__,0.90761,98.15,5.25,36.36,9,12.9,37.6,40.9,26.7,yes,NiFe_1h,HA,38821.83,50610.473,62643.125,73243.99
+forest_bin_14,d__Bacteria,p__Actinomycetota,c__Acidimicrobiia,o__Acidimicrobiales,f__RAAP-2,g__Bog-473,s__,0.95168,84.52,4.27,0,12.2,27.8,36.6,32.4,29.5,yes,NiFe_1h,HA,120826.49,134268.44,225669.73,227481.22
+forest_bin_15,d__Bacteria,p__Acidobacteriota,c__Terriglobia,o__Terriglobales,f__SbA1,g__Gp1-AA133,s__,0.91967,86.06,5.13,14.29,4.4,5.1,10.9,10.1,11.5,yes,"NiFe_1c, NiFe_3d",NA,0,0,0,0
+forest_bin_16,d__Bacteria,p__Pseudomonadota,c__Alphaproteobacteria,o__Sphingomonadales,f__Sphingomonadaceae,g__Sphingomicrobium,s__,0.96352,91.97,3.94,16.67,2.2,2.7,5.4,6.8,7.1,no,NA,NA,0,0,0,0
+forest_bin_17,d__Bacteria,p__Eremiobacterota,c__Eremiobacteria,o__Baltobacterales,f__Baltobacteraceae,g__Cybelea,s__,0.9572,79.74,7.51,15.38,7,6.5,10.2,7.4,5,yes,NiFe_1h,HA,17657.799,0,0,24982.62
+forest_bin_18,d__Bacteria,p__Myxococcota,c__Polyangia,o__Polyangiales,f__Polyangiaceae,g__Palsa-1150,s__,0.92125,70.42,2.6,50,6.2,13.8,3.5,6.1,3.5,no,NA,NA,15137.302,18048.877,19871.742,20605.586
+forest_bin_2,d__Bacteria,p__Chloroflexota,c__Ktedonobacteria,o__Ktedonobacterales,f__Ktedonobacteraceae,g__Dictyobacter,s__,0.94422,93.73,8.91,0,5.7,13.3,3.7,3.9,4.3,yes,"NiFe_1h, FeFe_A",HA,0,0,0,0
+forest_bin_3,d__Bacteria,p__Pseudomonadota,c__Alphaproteobacteria,o__Rhizobiales,f__Xanthobacteraceae,g__BOG-931,s__,0.9822,72.67,2.11,11.11,15.6,19.3,13.4,14.2,15.2,no,NA,NA,16924.945,19652.023,23975.498,26539.076
+forest_bin_4,d__Bacteria,p__Pseudomonadota,c__Alphaproteobacteria,o__Dongiales,f__Dongiaceae,g__,s__,0.7515,84.31,7.35,21.05,8.6,8.3,5.8,5.5,7.2,no,NA,NA,8198.013,9061.219,0,13992.715
+forest_bin_5,d__Bacteria,p__Acidobacteriota,c__Terriglobia,o__Terriglobales,f__SbA1,g__JABDBE01,s__,0.98043,71.93,2.78,50,17.7,15.1,18.8,16.9,22,no,NA,NA,0,0,0,0
+forest_bin_6,d__Bacteria,p__Acidobacteriota,c__Terriglobia,o__Terriglobales,f__SbA1,g__Sulfotelmatobacter,s__,0.98103,94.47,6.41,27.27,43.2,19,22.3,18.3,21,no,NA,NA,22843.275,0,0,0
+forest_bin_7,d__Bacteria,p__Actinomycetota,c__Thermoleophilia,o__Solirubrobacterales,f__Solirubrobacteraceae,g__Palsa-744,s__,0.87534,97.01,2.05,50,17.7,27.6,12.8,22.7,23.7,no,NA,NA,38579.895,49671.234,74812.62,74880.984
+forest_bin_8,d__Bacteria,p__Actinomycetota,c__Thermoleophilia,o__Solirubrobacterales,f__Solirubrobacteraceae,g__Palsa-744,s__,0.94319,82.91,1.78,50,5.7,13.6,6,8.7,9,no,NA,NA,35894.44,54155.875,0,0
+forest_bin_9,d__Bacteria,p__Pseudomonadota,c__Alphaproteobacteria,o__Rhizobiales,f__Beijerinckiaceae,g__GAS188,s__,0.98464,88.56,9.56,25,6.3,8,9.3,8.1,9.6,no,NA,NA,245267.88,235233.1,0,0

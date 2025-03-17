@@ -1,0 +1,278 @@
+---
+title: "H2_metagenome_anal"
+author: "Linta Reji"
+date: "2024-01-12"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+data.path = dirname(getwd())
+data.path
+load(paste0(data.path, "/data/hydrogen_metagenome_plotting.RData"))
+```
+
+
+Load libraries:
+```{r, echo=FALSE, message=FALSE}
+library(tidyverse)
+library(ggplot2)
+library(patchwork)
+```
+
+
+# new analyses
+```{r}
+data.path = dirname(getwd())
+
+# load PBS MAGs data
+pbs_mags_dat = read.table(paste0(data.path, "/data/pbs_metwrapMAGs_summary.csv"), sep="\t", header=TRUE)
+
+# load forest MAGs data
+forest_mags_dat = read.table(paste0(data.path, "/data/forest_metwrapMAGs_cumul_summary.csv"), sep="\t", header=TRUE)
+
+# load meadow MAGs data
+meadow_mags_dat = read.table(paste0(data.path, "/data/meadow_metwrapMAGs_summary.csv"), sep="\t", header=TRUE)
+```
+
+Plot PBS HA-Hase MAGs:
+```{r}
+# filter out and plot the abu of HA-Hase-harboring MAGs
+pbs_mags_dat_melt <- pbs_mags_dat %>%
+  filter(hyd_affinity == "HA") %>%
+  select(-c(domain, species, red_value, strain_heterogeneity)) %>%
+  pivot_longer(cols = c(PB_5_rpkm, PB_30_rpkm, PB_40_rpkm, PB_70_rpkm, PB_5_MT_tpm, PB_30_MT_tpm, PB_40_MT_tpm, PB_70_MT_tpm), names_to = "label", values_to = "RelAbu")
+
+pbs_mags_dat_melt = pbs_mags_dat_melt %>%
+  mutate(Type = ifelse(label %in% c("PB_5_MT_tpm", "PB_30_MT_tpm", "PB_40_MT_tpm", "PB_70_MT_tpm"), "metat", "metag"))
+
+# add %saturation measurements
+pbs_mags_dat_melt = pbs_mags_dat_melt %>%
+  mutate("%Saturation" = case_when(
+    str_detect(label, "PB_5") ~ 3,
+    str_detect(label, "PB_30") ~ 31,
+    str_detect(label, "PB_40") ~ 39,
+    str_detect(label, "PB_70") ~ 78),
+    soil_type="PB sand") %>%
+  relocate(soil_type, .before = 1)
+
+head(pbs_mags_dat_melt)
+
+pbs_mg = pbs_mags_dat_melt %>%
+  filter(Type == "metag") %>%
+  ggplot(aes(x=`%Saturation`, y=RelAbu, group = user_genome, color = factor(genus))) +
+  facet_wrap(~phylum, scales = "free", ncol = 2) +
+  ylim(0,45) +
+  geom_point(size = 3) +
+  geom_line() +
+  theme_minimal() +
+  theme(axis.line=element_line(color = "black")) +
+  theme(text = element_text(size = 12), axis.text.x = element_text(angle=90)) +
+  labs(color = "Genus") +
+  xlab("% Moisture") +
+  ylab("Normalized relative abundance (RPKM)")
+
+pbs_mt = pbs_mags_dat_melt %>%
+  filter(Type == "metat") %>%
+  ggplot(aes(x=`%Saturation`, y=RelAbu, group = user_genome, color = factor(genus))) +
+  facet_wrap(~phylum, scales = "free", ncol = 2) +
+  ylim(0,120000) +
+  geom_point(size = 3) +
+  geom_line() +
+  theme_minimal() +
+  theme(axis.line=element_line(color = "black")) +
+  theme(text = element_text(size = 12), axis.text.x = element_text(angle=90)) +
+  labs(color = "Genus") +
+  xlab("% Moisture") +
+  ylab("Normalized relative abundance (TPM)")  
+(pbs_mg + pbs_mt) + plot_layout(ncol = 1)
+```
+
+
+Plot forest HA-Hase MAGs:
+```{r}
+# filter out and plot the abu of HA-Hase-harboring MAGs
+forest_mags_dat_melt <- forest_mags_dat %>%
+  filter(hyd_affinity == "HA") %>%
+  select(-c(domain, species, red_value, strain_heterogeneity)) %>%
+  pivot_longer(cols = c(F_6_rpkm, F_10_rpkm, F_orig_30_rpkm, FS_30_rpkm, F_40_rpkm, F_6_MT_tpm,	F_10_MT_tpm,	F_orig_30_MT_tpm, F_40_MT_tpm), names_to = "label", values_to = "RelAbu")
+
+forest_mags_dat_melt = forest_mags_dat_melt %>%
+  mutate(Type = ifelse(label %in% c("F_6_MT_tpm",	"F_10_MT_tpm",	"F_orig_30_MT_tpm", "F_40_MT_tpm"), "metat", "metag"))
+
+# add %saturation measurements
+forest_mags_dat_melt = forest_mags_dat_melt %>%
+  mutate("%Saturation" = case_when(
+    str_detect(label, "F_6") ~ 8,
+    str_detect(label, "F_10") ~ 12,
+    str_detect(label, "F_orig_30") ~ 64,
+    str_detect(label, "FS_30") ~ 37,
+    str_detect(label, "F_40") ~ 51),
+    soil_type = "Forest") %>%
+  relocate(soil_type, .before = 1)
+head(forest_mags_dat_melt )
+
+forest_mg = forest_mags_dat_melt %>%
+  filter(Type == "metag") %>%
+  ggplot(aes(x=`%Saturation`, y=RelAbu, group = user_genome, color = factor(genus))) +
+  facet_wrap(~phylum, scales = "free", ncol = 4) +
+  ylim(0,42) +
+  geom_point(size = 3) +
+  geom_line() +
+  theme_minimal() +
+  theme(axis.line=element_line(color = "black")) +
+  theme(text = element_text(size = 12), axis.text.x = element_text(angle=90)) +
+  labs(color = "Genome") +
+  xlab("% Moisture") +
+  ylab("Normalized relative abundance (RPKM)")
+forest_mt = forest_mags_dat_melt %>%
+  filter(Type == "metat") %>%
+  ggplot(aes(x=`%Saturation`, y=RelAbu, group = user_genome, color = factor(genus))) +
+  facet_wrap(~phylum, scales = "free", ncol = 4) +
+  ylim(0,600000) +
+  geom_point(size = 3) +
+  geom_line() +
+  theme_minimal() +
+  theme(axis.line=element_line(color = "black")) +
+  theme(text = element_text(size = 12), axis.text.x = element_text(angle=90)) +
+  labs(color = "Genome") +
+  xlab("% Moisture") +
+  ylab("Normalized relative abundance (TPM)")
+
+forest_mg + forest_mt + plot_layout(ncol=1)
+```
+
+Plot meadow HA-Hase MAGs:
+```{r}
+# filter out and plot the abu of HA-Hase-harboring MAGs
+meadow_mags_dat_melt <- meadow_mags_dat %>%
+  filter(hyd_affinity == "HA") %>%
+  select(-c(domain, species, red_value, strain_heterogeneity)) %>%
+  pivot_longer(cols = c(M_7_rpkm, M_20_rpkm, M_30_rpkm, M_50_rpkm, M_7_MT_tpm, M_20_MT_tpm, M_30_MT_tpm, M_50_MT_tpm), names_to = "label", values_to = "RelAbu")
+
+meadow_mags_dat_melt = meadow_mags_dat_melt %>%
+  mutate(Type = ifelse(label %in% c("M_7_rpkm", "M_20_rpkm", "M_30_rpkm", "M_50_rpkm"), "metag", "metat"))
+
+# add %saturation measurements
+meadow_mags_dat_melt = meadow_mags_dat_melt %>%
+  mutate("%Saturation" = case_when(
+    str_detect(label, "M_7") ~ 6,
+    str_detect(label, "M_20") ~ 17,
+    str_detect(label, "M_30") ~ 25,
+    str_detect(label, "M_50") ~ 42),
+    soil_type = "Meadow") %>%
+  relocate(soil_type, .before = 1)
+head(meadow_mags_dat_melt)
+
+meadow_mags_dat_melt %>%
+  ggplot(aes(x=`%Saturation`, y=RelAbu, group = user_genome, color = factor(genus))) +
+  facet_wrap(Type~phylum, scales = "free", ncol = 4) +
+  geom_point(size = 3) +
+  geom_line() +
+  theme_minimal() +
+  theme(axis.line=element_line(color = "black")) +
+  theme(text = element_text(size = 12), axis.text.x = element_text(angle=90)) +
+  labs(color = "Genus") +
+  xlab("% Moisture") +
+  ylab("Normalized relative abundance")
+  
+```
+
+Combine all three soils:
+```{r}
+allSoils_melt = bind_rows(pbs_mags_dat_melt, forest_mags_dat_melt, meadow_mags_dat_melt)
+colnames(allSoils_melt)
+
+# plot 
+allSoils_melt %>%
+  mutate(genus_order = fct_reorder(genus, rev(phylum))) %>%
+  ggplot(aes(x=as.factor(`%Saturation`), y=RelAbu, group = user_genome, shape = factor(phylum), color=factor(genus_order))) +
+  facet_wrap(Type~soil_type, scales = "free") +
+  geom_point(size = 3) +
+  geom_line() +
+  theme_minimal() +
+  theme(axis.line=element_line(color = "black")) +
+  theme(text = element_text(size = 12), axis.text.x = element_text(angle=90)) +
+  labs(shape="Phylum", color = "Genus    ") +
+  xlab("% Saturation") +
+  ylab("Normalized relative abundance")
+```
+
+
+
+# HA-Hase rel abundance compared to GyrAB
+```{r}
+ha_gyr <- read.table(paste0(data.path, "/data/contig_HA_gyr_summary.txt"), sep="\t", header=TRUE)
+head(ha_gyr)
+colnames(ha_gyr)
+ha_gyr_filt = ha_gyr %>%
+  select(soil_type, moisture, g1h_perc, g1h_perc_err)
+
+ha_gyr_filt %>%
+  ggplot(aes(x=as.factor(moisture), y=g1h_perc)) +
+  geom_bar(stat="identity", color = "#899499", fill="#899499") +
+  geom_errorbar(aes(ymin = g1h_perc-g1h_perc_err , ymax = g1h_perc+g1h_perc_err , width = 0.1), color="black") +
+  facet_grid(~soil_type, scales = "free", space="free") +
+  theme_minimal() +
+  theme(axis.line=element_line(color = "black")) +
+  theme(text = element_text(size = 12), axis.text.x = element_text(angle=90)) +
+  xlab("% Saturation") +
+  ylab("Relative abundance of HA-HOM \n (% of total community)")
+```
+
+
+
+# MAG metabolism summary
+```{r}
+mag_metab = read.table(paste0(data.path, "/data/MAGs_metabolismSummary.txt"), quote="", sep= "\t", header=TRUE)
+mag_metab = mag_metab[,-15]
+
+# split functions from metadata
+mag_metab_fn = mag_metab[1:24, ] %>% pivot_longer(cols = -c(Category, Function), names_to = "MAG")
+mag_metab_mdata = mag_metab[25:33,-2] %>% 
+  pivot_longer(cols = -Category, names_to = "MAG") %>%
+  pivot_wider(names_from = Category, values_from = value)
+
+# combine into new df
+mag_metab_final = left_join(mag_metab_fn, mag_metab_mdata, by="MAG")
+```
+
+## plot metab summary:
+```{r}
+mag_metab_final$value = as.numeric(mag_metab_final$value)
+mag_metab_final$completeness = as.numeric(mag_metab_final$completeness)
+
+mag_metab_final$Category = factor(mag_metab_final$Category, levels = c("Aerobic_respiration", "CO oxidation", "Flagellum", "Chemotaxis", "Osmoprotectant_transport", "Sugar uptake", "CAZY", "Polyphenols")) 
+
+mag_metab_final %>% filter(MAG=="pbs_bin_6")
+
+mag_metab_final %>%
+  ggplot(aes(x=Function, y=MAG)) +
+  geom_point(aes(color=value, size=round(completeness))) +
+  scale_color_gradientn(
+    colors = c("#E0E0E0", "#EBF0F2", "#B8C6CF", "#69828A", "#2C3D4A"), # Custom gradient
+    values = scales::rescale(c(0, 0.25, 0.5, 0.8, 1)),   # Control gradient spread
+    name = "Pathway completeness"
+  ) +
+  # facet_grid(~Category, scales = "free_x", space="free") +
+  facet_grid(soil_type ~ Category, scales = "free", space = "free") +
+  scale_size_continuous(range = c(3,7), name="MAG completeness %") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust=0.5, color="black", size=11),
+        axis.text.y = element_text(color="black", size=11)) +
+  scale_x_discrete(labels = function(x) str_wrap(x, width = 8)) # Wrap labels
+
+```
+
+
+
+
+
+
+```{r}
+save.image(paste0(data.path, "/data/hydrogen_metagenome_plotting.RData"))
+```
+
