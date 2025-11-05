@@ -1,0 +1,1 @@
+This repository contains all the code and data files associated with the revised manuscript Reji et al., 2025, "Moisture Controls on Hydrogen Oxidizing Bacteria: Implications for the Global Soil Hydrogen Sink" https://doi.org/10.1101/2025.04.18.649571.
