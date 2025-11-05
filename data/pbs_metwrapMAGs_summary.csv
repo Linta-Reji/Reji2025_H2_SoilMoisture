@@ -1,4 +1,4 @@
-user_genome,domain,phylum,class,order,family,genus,species,red_value,completeness,contamination,strain_heterogeneity,PB_5_rpkm,PB_30_rpkm,PB_40_rpkm,PB_70_rpkm,hydrogenase,hyd_type_group,hyd_affinity,PB_5_MT_tpm,PB_30_MT_tpm,PB_40_MT_tpm,PB_70_MT_tpm
+user_genome,domain,phylum,class,order,family,genus,species,red_value,completeness,contamination,strain_heterogeneity,3%_rpkm,31%_rpkm,39%_rpkm,78%_rpkm,hydrogenase,hyd_type_group,hyd_affinity,3%_tpm,31%_tpm,39%_tpm,78%_tpm
 pbs_bin_1,d__Bacteria,p__Eremiobacterota,c__Eremiobacteria,o__Baltobacterales,f__Baltobacteraceae,g__,s__,0.88699,87.45,2.69,80,10.137805,13.5208235,12.470232,13.493853,no,NA,NA,783526.25,387398.06,353465.97,348599.34
 pbs_bin_10,d__Bacteria,p__Pseudomonadota,c__Alphaproteobacteria,o__ATCC43930,f__Stellaceae,g__,s__,0.8222,82.57,8.07,0,10.996389,5.614346,7.1865926,6.390882,no,NA,NA,88352.02,39563.55,47364.27,54500.316
 pbs_bin_11,d__Bacteria,p__Pseudomonadota,c__Gammaproteobacteria,o__Burkholderiales,f__Burkholderiaceae,g__Paraburkholderia,s__,0.99259,72.92,5.17,75,1.7844449,10.169981,6.988318,10.628373,yes,NiFe_4f,NA,0,31761.852,40756.75,51430.37

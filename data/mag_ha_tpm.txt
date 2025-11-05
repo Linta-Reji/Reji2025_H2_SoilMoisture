@@ -1,0 +1,49 @@
+soil_type	mag_id	gene_id	tpm	moisture_label
+Pine Barrens	pbs_bin_13	contig_487250_24	4.7379	31%
+Pine Barrens	pbs_bin_13	contig_487250_24	2.4125	39%
+Pine Barrens	pbs_bin_13	contig_487250_24	2.4986	3%
+Pine Barrens	pbs_bin_13	contig_487250_24	0.411	78%
+Pine Barrens	pbs_bin_4	contig_1144081_1	1.9177	31%
+Pine Barrens	pbs_bin_4	contig_1144081_1	0.7912	39%
+Pine Barrens	pbs_bin_4	contig_1144081_1	0	3%
+Pine Barrens	pbs_bin_4	contig_1144081_1	0.5493	78%
+Pine Barrens	pbs_bin_5	contig_2362_2	0.3657	31%
+Pine Barrens	pbs_bin_5	contig_2362_2	0	39%
+Pine Barrens	pbs_bin_5	contig_2362_2	2.182	3%
+Pine Barrens	pbs_bin_5	contig_2362_2	2.3861	78%
+Pine Barrens	pbs_bin_6	contig_474831_14	1.2047	31%
+Pine Barrens	pbs_bin_6	contig_474831_14	0	39%
+Pine Barrens	pbs_bin_6	contig_474831_14	0.2317	3%
+Pine Barrens	pbs_bin_6	contig_474831_14	1.1469	78%
+Pine Barrens	pbs_bin_9	contig_1029603_4	0	31%
+Pine Barrens	pbs_bin_9	contig_1029603_4	1.7128	39%
+Pine Barrens	pbs_bin_9	contig_1029603_4	0.5942	3%
+Pine Barrens	pbs_bin_9	contig_1029603_4	1.2568	78%
+Meadow	meadow_bin_1	contig_626881_1	2.154	16%
+Meadow	meadow_bin_1	contig_626881_1	0	24%
+Meadow	meadow_bin_1	contig_626881_1	0	40%
+Meadow	meadow_bin_1	contig_626881_1	0	6%
+Meadow	meadow_bin_4	contig_210182_9	0	16%
+Meadow	meadow_bin_4	contig_210182_9	1.8142	24%
+Meadow	meadow_bin_4	contig_210182_9	0	40%
+Meadow	meadow_bin_4	contig_210182_9	0	6%
+Forest	forest_bin_1	contig_299973_5	0.2883	11%
+Forest	forest_bin_1	contig_299973_5	0.9032	44%
+Forest	forest_bin_1	contig_299973_5	2.4824	7%
+Forest	forest_bin_1	contig_299973_5	0	56%
+Forest	forest_bin_13	contig_463269_58	0.2868	11%
+Forest	forest_bin_13	contig_463269_58	0.5392	44%
+Forest	forest_bin_13	contig_463269_58	1.5599	7%
+Forest	forest_bin_13	contig_463269_58	0.1088	56%
+Forest	forest_bin_14	contig_783246_2	0	11%
+Forest	forest_bin_14	contig_783246_2	0	44%
+Forest	forest_bin_14	contig_783246_2	1.6843	7%
+Forest	forest_bin_14	contig_783246_2	0	56%
+Forest	forest_bin_17	contig_779337_40	0	11%
+Forest	forest_bin_17	contig_779337_40	0	44%
+Forest	forest_bin_17	contig_779337_40	2.8551	7%
+Forest	forest_bin_17	contig_779337_40	0	56%
+Forest	forest_bin_2	contig_806610_1	0.9245	11%
+Forest	forest_bin_2	contig_806610_1	3.0018	44%
+Forest	forest_bin_2	contig_806610_1	0.2285	7%
+Forest	forest_bin_2	contig_806610_1	0	56%

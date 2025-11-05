@@ -1,7 +1,7 @@
 ---
-title: "Untitled"
+title: "Fitting models H2"
 output: html_document
-date: "2025-02-16"
+date: "2025-09-12"
 ---
 
 ```{r setup, include=FALSE}
@@ -12,7 +12,6 @@ Load image
 
 ```{r}
 data.path = dirname(getwd())
-load(paste0(data.path, "/data/fitting_models_updated.RData"))
 ```
 
 Load libraries:
@@ -156,7 +155,7 @@ calc_k_psi_g <- function(fM, param_df, obs, t_ref) {
 data.path = dirname(getwd())
 
 # observations
-dat = read.table(paste0(data.path, "/data/H2_experiments_allData_final.txt"), header=TRUE, sep="\t", check.names = FALSE)
+dat = read.table(paste0(data.path, "/data/H2_experiments_allData_finalCorrected.txt"), header=TRUE, sep="\t", check.names = FALSE)
 
 # soil properties
 soil_properties = read.csv(paste0(data.path, "/data/Bertagni.csv"), row.names = 1)
@@ -173,7 +172,8 @@ colnames(soil_properties) = c("Psi..kPa", "b", "n", "sws", "sopt")
 
 ```{r}
 dat = dat %>%
-  mutate(thetaW = water_perDrySoil* (soil_g/bulk_vol_soil_ml),
+  mutate(#thetaW = water_perDrySoil* (soil_g/bulk_vol_soil_ml),
+        thetaW = water_perDrySoil*bulk_density_gPercm3,
          s = thetaW/porosity)
 ```
 
@@ -261,6 +261,10 @@ obs = obs %>%
   left_join(min_water, by = "soil_type") %>%
   mutate(s_corrected = s - min_s + min_s_from_WP) %>%
   select(-starts_with("min_"))
+
+min_water
+obs %>% select(s, s_from_WP, s_corrected) %>% unique()
+
 ```
 
 ## plot soil water characteristic curves
@@ -486,25 +490,27 @@ OC_g = OC_g %>%
   mutate(k_f_V_perc = 100*k_f_V/max(k_f_V)) %>%
   mutate(k_f_V_scaled = k_f_V/max(k_f_V))
 
+pdf(file =  paste0(data.path, "/data/Figure_1b_corr.pdf"), width = 6, height = 4)
 ggplot(data = OC_g, aes(x = WP, y = k_f_V_scaled)) +
   geom_line(data = df_bertagni, aes(x=psi, y=pred_k_scaled, color=soil_type, linetype = model), linewidth = 1) +
   geom_line(data = df_bertagni_new, aes(x=psi, y=pred_k_scaled, color=soil_type, linetype = model), linewidth = 1) +
   #geom_line(data= df_ehhalt, aes(x=psi, y=pred_k_scaled, color=soil_type, linetype = model), linewidth = 1) +
   #geom_line(data= df_smith_downey, aes(x=psi, y=pred_k_scaled, color=soil_type, linetype = model), linewidth = 1) +
   geom_point(aes(fill=soil_type), size=2.5, shape=21, color="black", stroke=0.3) +
-  scale_x_continuous(trans = symlog_trans(threshold = 1), limits = c(-150, -0.5), breaks = c(-100, -10, -1, -0.01), expand = c(0,0)) +
+  scale_x_continuous(trans = symlog_trans(threshold = 1), limits = c(-150, -0.5), breaks = c(-100, -50, -10, -1, -0.01), expand = c(0,0)) +
   scale_fill_manual(values = c("forestgreen", "gold", "violetred")) +
   scale_color_manual(values = c("forestgreen", "gold", "violetred")) +
   scale_linetype_manual(values = c("dotdash", "solid",  "dotted", "longdash")) +
   xlab(expression(psi)) +
   theme_minimal() +
   theme(axis.text = element_text(color="black", size=12))
+dev.off()
 ```
 
 # save image
 ```{r}
 data.path
-# save.image(paste0(data.path, "/data/fitting_models_updated.RData"))
+#save.image(paste0(data.path, "/data/fitting_models_updatedCorr.RData"))
 ```
 
 

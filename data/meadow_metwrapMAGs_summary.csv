@@ -1,4 +1,4 @@
-user_genome,domain,phylum,class,order,family,genus,species,red_value,completeness,contamination,strain_heterogeneity,M_7_rpkm,M_20_rpkm,M_30_rpkm,M_50_rpkm,hydrogenase,hyd_type_group,hyd_affinity,M_7_MT_tpm,M_20_MT_tpm,M_30_MT_tpm,M_50_MT_tpm
+user_genome,domain,phylum,class,order,family,genus,species,red_value,completeness,contamination,strain_heterogeneity,6%_rpkm,16%_rpkm,24%_rpkm,40%_rpkm,hydrogenase,hyd_type_group,hyd_affinity,6%_tpm,16%_tpm,24%_tpm,40%_tpm
 meadow_bin_1,d__Bacteria,p__Actinomycetota,c__Actinomycetes,o__Propionibacteriales,f__Propionibacteriaceae,g__JAJTCL01,s__,0.94917,80.13,5.87,4.55,50.14635,41.17489,51.37992,29.059689,yes,NiFe_1h,HA,0,397053.4,424663.25,377456.97
 meadow_bin_2,d__Bacteria,p__Pseudomonadota,c__Alphaproteobacteria,o__Sphingomonadales,f__Sphingomonadaceae,g__Sphingomicrobium,s__,0.9628,90.77,3.33,36.36,83.598625,74.926956,104.43361,225.85724,no,NA,NA,0,270463.22,229864.94,295518.63
 meadow_bin_3,d__Bacteria,p__Pseudomonadota,c__Alphaproteobacteria,o__Rhizobiales,f__Methyloligellaceae,g__Methyloceanibacter,s__,0.92438,76.26,6.38,45.24,140.63673,150.56517,136.55968,98.928535,no,NA,NA,893814,280081.2,279845.97,260842.7

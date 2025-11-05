@@ -1,0 +1,1421 @@
+---
+title: "hyd_expression"
+output: html_document
+date: "2025-08-08"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Load libraries:
+```{r, message=FALSE}
+library(tidyverse)
+library(viridis)
+library(patchwork)
+library(scales)
+library(ComplexHeatmap)
+library(circlize)
+library(ComplexHeatmap)
+library(factoextra)
+library(cluster)
+library(LightLogR)
+library(dunn.test)
+```
+
+Define data path:
+```{r}
+data.path = dirname(getwd())
+
+```
+
+--- Pine Barrens Sand
+
+Read in data:
+```{r}
+pbs_hyd_tpm = read.table(paste0(data.path, "/data/pbs_hyd_tpm.txt"), sep="\t", header=TRUE, check.names = FALSE)
+
+# how many are expressed in at least one moisture level?
+pbs_hyd_tpm %>% 
+  filter(rowSums(across(tail(names(pbs_hyd_tpm), 4)) == 0) < 4) %>%
+  dim()
+```
+
+Examine the distribution of TPM values across moisture levels:
+```{r}
+pbs_hyd_tpm %>%
+  filter(rowSums(across(tail(names(pbs_hyd_tpm), 4)) == 0) < 4) %>%
+  pivot_longer(cols = tail(names(pbs_hyd_tpm), 4), 
+               names_to = "sample", values_to = "TPM") %>%
+  group_by(sample) %>%
+  ggplot(aes(x = sample, y = TPM)) +
+  geom_boxplot()
+```
+
+Calculate total hydrogenase activity per moisture level
+```{r}
+pbs_tot_activity = pbs_hyd_tpm %>%
+  pivot_longer(cols = matches("%"), 
+               names_to = "% moisture", 
+               values_to = "tpm") %>%
+  filter(tpm>0) %>%
+  group_by(`% moisture`) %>% 
+  summarise(total_tpm = sum(tpm),
+            median_tpm = median(tpm)) %>%
+  arrange("% moisture") %>%
+  mutate(soil_type="PB sand")
+pbs_tot_activity
+```
+
+Filter and prepare for heatmap/cluster analyses:
+```{r}
+pbs_hyd_tpm_clean = pbs_hyd_tpm %>%
+  # convert to long format for ggplot
+  pivot_longer(cols = matches("%"), 
+               names_to = "sample", 
+               values_to = "tpm") %>%
+  # extract moisture level from sample name
+  mutate(moisture = str_extract(sample, "\\d+") %>% as.numeric()) %>%
+  mutate(moisture_label = paste0(moisture, "%")) %>%
+  # calculate fraction of genes expressed at each moisture level
+  group_by(moisture) %>%
+  mutate(
+    total_genes = n(),
+    nonzero_genes = sum(tpm > 0),
+    percent_nonzero = round(100 * (nonzero_genes / total_genes), 1)
+  ) %>%
+  ungroup() %>%
+  # Remove genes with tpm=zero across all moisture levels
+  group_by(gene_id) %>%
+  filter(sum(tpm > 0) > 0) %>%
+  ungroup()
+
+# number of genes remaining after filtering:
+print(paste("Number of genes after filtering:", length(unique(pbs_hyd_tpm_clean$gene_id))))
+```
+
+Z-score normalized heatmap of TPM values:
+```{r}
+pbs_tpm_matrix = pbs_hyd_tpm_clean %>%
+  select(gene_id, moisture, tpm) %>%
+  pivot_wider(names_from = moisture, values_from = tpm, values_fill = 0) %>%
+  column_to_rownames("gene_id") %>%
+  as.matrix()
+
+# Z-score normalize by row (gene)
+pbs_tpm_z = t(scale(t(pbs_tpm_matrix)))
+# reorder columns by increasing moisture
+moisture_order = c("3", "31", "39", "78")
+pbs_tpm_z_ordered = pbs_tpm_z[, moisture_order]
+
+# Create color function for z-scores
+breakpoints = seq(-2, 2, length.out = 7)  # more balanced colors for z-scores
+pbs_col_fun = colorRamp2(
+  breakpoints,
+  viridis(length(breakpoints), option = "plasma")
+)
+
+# create complex heatmap with dendrograms
+pbs_hmZ = Heatmap(
+  pbs_tpm_z_ordered,
+  name = "Z-score",
+  col = pbs_col_fun,
+  clustering_distance_rows = "euclidean",
+  clustering_method_rows = "ward.D2",
+  cluster_columns = FALSE,
+  #clustering_distance_columns = "euclidean", 
+  #clustering_method_columns = "ward.D2",
+  show_row_names = TRUE,
+  show_column_names = TRUE,
+  row_names_gp = gpar(fontsize = 8),
+  column_names_gp = gpar(fontsize = 10),
+  heatmap_legend_param = list(title = "Z-score"),
+  column_title = "Moisture Level (%)",
+  row_title = "Gene ID"
+)
+pbs_hmZ
+```
+
+extract cluster IDs for each gene and add to heatmap
+```{r}
+# extract the row clustering from the heatmap
+pbs_row_dend = row_dend(draw(pbs_hmZ))
+# a. heirarchical clustering
+pbs_row_clusters = cutree(as.hclust(pbs_row_dend), k = 4)  # choosing k=4 based on visual inspection of the heatmap dendrogram
+# add hierarchical cluster information back to the data
+pbs_cluster_df = data.frame(
+  gene_id = names(pbs_row_clusters),
+  cluster = pbs_row_clusters
+)
+
+# alternatively, b. k-means clustering:
+# determine optimal clusters for k-means
+fviz_nbclust(pbs_tpm_z_ordered, kmeans, method = "silhouette") +
+  labs(title = "Silhouette Method for K-means")
+set.seed(123)
+pbs_kmeans_clusters = kmeans(pbs_tpm_z, centers = 4, nstart = 25)$cluster
+
+# add k-means cluster information back to the data
+pbs_cluster_df_k = data.frame(
+  gene_id = names(pbs_kmeans_clusters),
+  cluster = pbs_kmeans_clusters
+)
+
+# compare with hierarchical clustering
+table(Hierarchical = pbs_row_clusters, Kmeans = pbs_kmeans_clusters)
+# robust clusters detected by both methods.
+
+# replot heatmap with cluster annotations
+# create named color vector for clusters
+pbs_cluster_colors = rainbow(max(pbs_kmeans_clusters))
+names(pbs_cluster_colors) = as.character(1:max(pbs_kmeans_clusters))
+# create row annotation for clusters
+pbs_row_ha = rowAnnotation(
+  Cluster = as.factor(pbs_kmeans_clusters),
+  col = list(Cluster = c("4" = "#A0522D",
+  "2" = "#D4AF37",
+  "1" = "#7BADD9",
+  "3" = "#4A6FA5"))
+) 
+
+# Re-create heatmap with cluster annotation
+pdf(file =  paste0(data.path, "/data/pbs_TPM_heatmap.pdf"),
+    width = 5,
+    height = 8)
+Heatmap(
+  pbs_tpm_z_ordered,
+  name = "Z-score",
+  col = pbs_col_fun,
+  clustering_distance_rows = "euclidean",
+  clustering_method_rows = "ward.D2",
+  cluster_columns = FALSE,
+  #clustering_distance_columns = "euclidean", 
+  #clustering_method_columns = "ward.D2",
+  show_row_names = TRUE,
+  show_column_names = TRUE,
+  row_names_gp = gpar(fontsize = 5),
+  column_names_gp = gpar(fontsize = 8),
+  right_annotation = pbs_row_ha,  # add cluster annotation
+  heatmap_legend_param = list(title = "Z-score"),
+  column_title = "Moisture Level (%)",
+  row_title = "Gene ID"
+)
+dev.off()
+```
+
+add cluster info to the original dataframe, plot the distribution of TPM values for genes in each cluster across moisture levels.
+
+plot version 1:
+```{r}
+# map clusters back to the original dataframe
+pbs_hyd_tpm_clusters = pbs_hyd_tpm_clean %>%
+  left_join(pbs_cluster_df_k, by = "gene_id") %>%
+  # convert cluster to factor for better plotting
+  mutate(cluster = as.factor(cluster))
+
+# cluster ID plus tpm distribution, version 1:
+pbs_tpm_dist_clustersPlot = pbs_hyd_tpm_clusters %>%
+  filter(tpm > 0) %>%  # Remove zeros for log scale
+  ggplot(aes(x = as.factor(moisture), y = tpm, color = cluster)) +
+  geom_jitter(alpha = 0.75, width = 0.2,  size = 2) +
+  # quartiles as thinner lines
+  stat_summary(fun = "median", geom = "crossbar", width = 0.2, 
+               color = "black", size = 0.5, alpha = 0.6) +
+  stat_summary(fun.data = function(x) data.frame(ymin = quantile(x, 0.25), 
+                                                 ymax = quantile(x, 0.75)), 
+               geom = "errorbar", width = 0.2, color = "black", size = 0.4) +
+  # add percentage text at top of each moisture group
+  geom_text(aes(x = as.factor(moisture), y = Inf, label = paste0(percent_nonzero, "%")), vjust = 1.2, hjust = 0.5, size = 3.5, color = "black", inherit.aes = FALSE) +
+  scale_y_continuous(trans = "symlog", breaks = c(-10^(5:0), 0, 10^(0:5))) +
+  # colors to match the heatmap cluster colors
+  scale_color_manual(values = c("#87CEEB", "#F4A460", "#191970", "#8B4513")) +
+  labs(
+    x = "Moisture Level (%)",
+    y = expression(log[10]~"(TPM)"),
+    color = "Cluster",
+    fill = "Cluster") +
+  theme_linedraw() +
+  theme(
+    legend.position = "right",
+    axis.text.x = element_text(size = 10),
+    strip.text = element_text(size = 10)
+  )
+pbs_tpm_dist_clustersPlot
+```
+
+
+plot version 1a:
+```{r}
+# First, identify dominant clusters per moisture level
+dominant_clusters_pbs = pbs_hyd_tpm_clusters %>%
+  filter(tpm > 0) %>%
+  group_by(moisture, cluster) %>%
+  summarise(n = n(), .groups = "drop") %>%
+  group_by(moisture) %>%
+  slice_max(n, n = 1) %>%
+  mutate(is_dominant = TRUE)
+
+# Add dominant status to main data
+plot1_data_pbs = pbs_hyd_tpm_clusters %>%
+  filter(tpm > 0) %>%
+  left_join(dominant_clusters_pbs %>% select(moisture, cluster, is_dominant), 
+            by = c("moisture", "cluster")) %>%
+  mutate(is_dominant = ifelse(is.na(is_dominant), FALSE, TRUE))
+
+# Plot with dimming
+plot1_data_pbs %>%
+  ggplot(aes(x = as.factor(moisture), y = tpm, color = cluster)) +
+  geom_jitter(aes(alpha = is_dominant), width = 0.2, size = 2) +
+  scale_alpha_manual(values = c("TRUE" = 1, "FALSE" = 0.4), guide = "none") +
+  # quartiles as thinner lines
+  stat_summary(fun = "median", geom = "crossbar", width = 0.2, 
+               color = "black", size = 0.5, alpha = 0.6) +
+  stat_summary(fun.data = function(x) data.frame(ymin = quantile(x, 0.25), 
+                                                 ymax = quantile(x, 0.75)), 
+               geom = "errorbar", width = 0.2, color = "black", size = 0.4) +
+  # add percentage text at top of each moisture group
+  geom_text(aes(x = as.factor(moisture), y = Inf, label = paste0(percent_nonzero, "%")), vjust = 1.2, hjust = 0.5, size = 3.5, color = "black", inherit.aes = FALSE) +
+  scale_y_continuous(trans = "symlog", breaks = c(-10^(5:0), 0, 10^(0:5))) +
+  # colors to match the heatmap cluster colors
+  scale_color_manual(values = c("#87CEEB", "#F4A460", "#191970", "#8B4513")) +
+  labs(
+    x = "Moisture Level (%)",
+    y = expression(log[10]~"(TPM)"),
+    color = "Cluster",
+    fill = "Cluster") +
+  theme_linedraw() +
+  theme(
+    legend.position = "right",
+    axis.text.x = element_text(size = 10),
+    strip.text = element_text(size = 10)
+  )
+
+# alternatively, add an outline to highlight dominant clusters better:
+pbs_dist_plot1 = plot1_data_pbs %>%
+  ggplot(aes(x = as.factor(moisture), y = tpm, color = cluster)) +
+  geom_jitter(aes(stroke = ifelse(is_dominant, 0.75, 0)), 
+              width = 0.2, size = 2, alpha = 0.8) +
+  #scale_stroke_identity() +  # Use stroke values directly
+  # quartiles as thinner lines
+  stat_summary(fun = "median", geom = "crossbar", width = 0.2, 
+               color = "black", size = 0.5, alpha = 0.6) +
+  stat_summary(fun.data = function(x) data.frame(ymin = quantile(x, 0.25), 
+                                                 ymax = quantile(x, 0.75)), 
+               geom = "errorbar", width = 0.2, color = "black", size = 0.4) +
+  # add percentage text at top of each moisture group
+  geom_text(aes(x = as.factor(moisture), y = Inf, label = paste0(percent_nonzero, "%")), 
+            vjust = 1.2, hjust = 0.5, size = 3.5, color = "black", inherit.aes = FALSE) +
+  scale_y_continuous(trans = "symlog", breaks = c(-10^(5:0), 0, 10^(0:5))) +
+  scale_color_manual(values = c("#87CEEB", "#F4A460", "#191970", "#8B4513")) +
+  labs(
+    x = "Moisture Level (%)",
+    y = expression(log[10]~"(TPM)"),
+    color = "Cluster") +
+  theme_linedraw() +
+  theme(
+    legend.position = "right",
+    axis.text.x = element_text(size = 10),
+    strip.text = element_text(size = 10)
+  )
+pbs_dist_plot1
+```
+
+
+plot version 2:
+plot each gene cluster separately for each moisture level
+```{r}
+# calculate summary data for gene clusters
+summary_data = pbs_hyd_tpm_clusters %>%
+  filter(tpm > 0) %>%
+  group_by(moisture, cluster) %>%
+  summarise(
+    n_active = n(),
+    median_tpm = median(tpm),
+    .groups = "drop"
+  ) %>%
+  group_by(moisture) %>%
+  mutate(
+    total_active = sum(n_active),
+    prop_active = n_active / total_active
+  )
+
+# cluster ID plus tpm distribution, version 2:
+pbs_dist_plot2 = pbs_hyd_tpm_clusters %>%
+  filter(tpm > 0) %>%
+  ggplot(aes(x = cluster, y = tpm, color = cluster, fill = cluster)) +
+  geom_jitter(width = 0.25, height = 0, size = 1.5) +
+  stat_summary(fun.data = function(x) data.frame(ymin = quantile(x, 0.25), 
+                                                 ymax = quantile(x, 0.75)), 
+               geom = "errorbar", width = 0.3, color = "black", 
+               size = 0.3, alpha = 0.75) +
+  stat_summary(fun = "median", geom = "crossbar", width = 0.4, 
+               color = "black", size = 0.3, alpha = 0.5) +
+  # sized summary points
+  geom_point(data = summary_data, 
+             aes(x = cluster, y = 0.01, size = prop_active),
+             alpha = 0.4, stroke = 1, color = "grey60") +
+  geom_text(aes(x = 2.5, y = Inf, label = paste0(percent_nonzero, "%")), 
+            vjust = 1.2, hjust = 0.5, size = 3.5, color = "black", 
+            inherit.aes = FALSE) +
+  scale_x_discrete(expand = expansion(mult = c(0.05, 0.05))) +
+  scale_y_continuous(trans = "symlog", breaks = c(-10^(2:0), 0, 10^(0:2))) +
+  scale_color_manual(values = c("1" = "#7BADD9", "2" = "#D4AF37", 
+                               "3" = "#4A6FA5", "4" = "#A0522D")) +
+  scale_fill_manual(values = c("1" = "#7BADD9", "2" = "#D4AF37", 
+                              "3" = "#4A6FA5", "4" = "#A0522D")) +
+  scale_size_continuous(name = "Proportion of\nexpressed genes\nper Cluster", range = c(1.5, 6)) +
+  facet_wrap(~paste(moisture, "%"), nrow = 1) +
+  labs(
+    x = "Cluster",
+    y = expression(log[10]~"(TPM)"),
+    color = "Cluster",
+    fill = "Cluster",
+  ) +
+  theme_linedraw()
+
+pbs_dist_plot2
+
+pbs_hyd_tpm_clusters %>%
+  filter(tpm > 0) %>%
+  ggplot(aes(x = moisture_label, y = tpm)) +
+  geom_jitter(width = 0.25, height = 0, size = 1.5, alpha = 0.7) +
+  stat_summary(fun.data = function(x) data.frame(ymin = quantile(x, 0.25), 
+                                                 ymax = quantile(x, 0.75)), 
+               geom = "errorbar", width = 0.3, color = "black", 
+               size = 0.3, alpha = 0.75) +
+  stat_summary(fun = "median", geom = "crossbar", width = 0.4, 
+               color = "black", size = 0.3, alpha = 0.5) +
+  # add percentage text at top of each moisture group
+  geom_text(aes(x = moisture_label, y = Inf, label = paste0(percent_nonzero, "%")), vjust = 1.2, hjust = 0.5, size = 3.5, color = "black", inherit.aes = FALSE) +
+  scale_x_discrete(expand = expansion(mult = c(0.05, 0.05))) +
+  scale_y_continuous(trans = "symlog", breaks = c(-10^(2:0), 0, 10^(0:2))) +
+  facet_wrap(~paste("Cluster", cluster), nrow = 1) +
+  labs(
+    x = "Moisture (%)",
+    y = expression(log[10]~"(TPM)"),
+    title = "Gene Expression Across Moisture Levels by Cluster"
+  ) +
+  theme_linedraw() +
+  theme(
+    strip.text = element_text(face = "bold"),
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  )
+```
+
+Facet by cluster rather than moisture level:
+```{r}
+# First, create summary data for the new structure (grouped by moisture and cluster)
+summary_data_moisture = pbs_hyd_tpm_clusters %>%
+  filter(tpm > 0) %>%
+  group_by(moisture_label, cluster) %>%
+  summarise(
+    n_active = n(),
+    median_tpm = median(tpm),
+    .groups = "drop"
+  ) %>%
+  group_by(moisture_label) %>%
+  mutate(
+    total_active = sum(n_active),
+    prop_active = n_active / total_active
+  )
+
+# plot with the summary points
+pbs_hyd_tpm_clusters %>%
+  filter(tpm > 0) %>%
+  ggplot(aes(x = moisture_label, y = tpm, color=cluster)) +
+  geom_jitter(width = 0.15, height = 0, size = 1.5, alpha = 0.7) +
+  stat_summary(fun.data = function(x) data.frame(ymin = quantile(x, 0.25), 
+                                                 ymax = quantile(x, 0.75)), 
+               geom = "errorbar", width = 0.3, color = "black", 
+               size = 0.3, alpha = 0.75) +
+  stat_summary(fun = "median", geom = "crossbar", width = 0.4, 
+               color = "black", size = 0.3, alpha = 0.5) +
+  # add percentage text at top of each moisture group
+  geom_text(aes(x = moisture_label, y = Inf, label = paste0(percent_nonzero, "%")), vjust = 1.2, hjust = 0.32, size = 3.5, color = "black", inherit.aes = FALSE) +
+  # Add back the sized summary points
+  geom_point(data = summary_data_moisture, 
+             aes(x = moisture_label, y = 0.01, size = prop_active),
+             alpha = 0.4, stroke = 1, color = "grey60") +
+  scale_x_discrete(expand = expansion(mult = c(0.05, 0.05))) +
+  scale_y_continuous(trans = "symlog", breaks = c(-10^(2:0), 0, 10^(0:2))) +
+  scale_color_manual(values = c("#87CEEB", "#F4A460", "#191970", "#8B4513")) +
+  scale_size_continuous(name = "Proportion of\nexpressed genes\nper Cluster", range = c(1.5, 6)) +
+  facet_wrap(~paste("Cluster", cluster), nrow = 1) +
+  labs(
+    x = "Moisture (%)",
+    y = expression(log[10]~"(TPM)"),
+  ) +
+  theme_linedraw() +
+  theme(
+    legend.position = "bottom",
+    strip.text = element_text(face = "bold"),
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  )
+
+pbs_hyd_tpm_clusters %>%
+  filter(tpm > 0) %>%
+  ggplot(aes(x = cluster, y = tpm, color = cluster)) +
+  geom_boxplot() +
+  facet_wrap(~paste(moisture, "%"), nrow = 1) +
+  scale_y_log10()
+```
+
+match distribution plot with the heatmap normalized plot:
+
+```{r}
+pbs_gene_order = pbs_tpm_z_ordered %>%
+  as.data.frame() %>%
+  rownames_to_column("gene_id") %>%
+  left_join(pbs_cluster_df_k, by = "gene_id") %>%
+  arrange(cluster, desc(`78`)) %>%  # Sort by cluster, then by expression at highest moisture
+  pull(gene_id)
+
+# use Z-scores in boxplot to match heatmap
+pbs_tpm_z_long = pbs_tpm_z_ordered %>%
+  as.data.frame() %>%
+  rownames_to_column("gene_id") %>%
+  pivot_longer(cols = -gene_id, names_to = "moisture", values_to = "z_score") %>%
+  mutate(moisture = as.numeric(moisture)) %>%
+  # add cluster information
+  left_join(pbs_cluster_df_k, by = "gene_id") %>%
+  mutate(cluster = as.factor(cluster))
+
+# create a simplified view with fewer genes for clarity
+pbs_top_genes_per_cluster = pbs_tpm_z_long %>%
+  group_by(cluster) %>%
+  # Select genes with most extreme patterns
+  slice_max(abs(z_score), n = 10) %>%
+  pull(gene_id) %>%
+  unique()
+
+simplified_plot = pbs_tpm_z_long %>%
+  #filter(gene_id %in% pbs_top_genes_per_cluster) %>%
+  ggplot(aes(x = as.factor(moisture), y = z_score, color = cluster)) +
+  geom_hline(yintercept = 0, linetype = "dashed", alpha = 0.3) +
+  # geom_line(aes(group = gene_id), alpha = 0.3, size = 0.5) +
+  geom_jitter(alpha = 0.7, width = 0.1, size = 1) +
+  #stat_summary(fun = mean, geom = "line", aes(group = cluster), size = 1, alpha = 0.9) +
+  stat_summary(fun = mean, geom = "point", aes(group = cluster), size = 3) +
+  scale_color_manual(values = c("#87CEEB", "#F4A460", "#191970", "#8B4513")) +
+  labs(
+    x = "Moisture Level (%)",
+    y = "Z-score",
+    color = "Cluster"
+  ) +
+  theme_minimal()
+
+simplified_plot
+
+pbs_tpm_z_long %>%
+  filter(gene_id %in% pbs_top_genes_per_cluster) %>%
+  ggplot(aes(x = as.factor(moisture), y = z_score, color = cluster)) +
+  geom_jitter(alpha = 0.7, width = 0.1, size = 1) +
+  stat_summary(
+    fun.data = function(x) {
+      # Find the most common cluster at this moisture level
+      cluster_counts <- table(cluster[!is.na(x)])
+      most_abundant_cluster <- names(cluster_counts)[which.max(cluster_counts)]
+      
+      # Calculate mean only for the most abundant cluster
+      cluster_data <- x[cluster == most_abundant_cluster]
+      data.frame(y = mean(cluster_data, na.rm = TRUE))
+    },
+    geom = "point", size = 3
+  ) +
+  scale_color_manual(values = c("#87CEEB", "#F4A460", "#191970", "#8B4513")) +
+  labs(
+    x = "Moisture Level (%)",
+    y = "Z-score",
+    color = "Cluster",
+    title = "Individual Gene Trajectories and Most Abundant Cluster Means"
+  ) +
+  theme_minimal()
+```
+
+
+
+--- Meadow soil
+
+Read in data:
+```{r}
+meadow_hyd_tpm = read.table(paste0(data.path, "/data/meadow_hyd_tpm.txt"), sep="\t", header=TRUE, check.names = FALSE)
+
+# how many are expressed in at least one moisture level?
+meadow_hyd_tpm %>% 
+  filter(rowSums(across(tail(names(meadow_hyd_tpm), 4)) == 0) < 4) %>%
+  dim()
+```
+
+Examine the distribution of TPM values across moisture levels:
+```{r}
+meadow_hyd_tpm %>%
+  filter(rowSums(across(tail(names(meadow_hyd_tpm), 4)) == 0) < 4) %>%
+  pivot_longer(cols = tail(names(meadow_hyd_tpm), 4), 
+               names_to = "sample", values_to = "TPM") %>%
+  group_by(sample) %>%
+  ggplot(aes(x = sample, y = TPM)) +
+  geom_boxplot()
+```
+
+Calculate total hydrogenase activity per moisture level
+```{r}
+meadow_tot_activity = meadow_hyd_tpm %>%
+  #filter(gene_id != "contig_347635_2") %>%
+  pivot_longer(cols = matches("%"), 
+               names_to = "% moisture", 
+               values_to = "tpm") %>%
+  filter(tpm>0) %>%
+  group_by(`% moisture`) %>% 
+  summarise(total_tpm = sum(tpm),
+            median_tpm = median(tpm)) %>%
+  arrange("% moisture") %>%
+  mutate(soil_type="Meadow")
+meadow_tot_activity
+```
+
+Filter and prepare for heatmap/cluster analyses:
+```{r}
+meadow_hyd_tpm_clean = meadow_hyd_tpm %>%
+  # Convert to long format for ggplot
+  pivot_longer(cols = matches("%"), 
+               names_to = "sample", 
+               values_to = "tpm") %>%
+  # Extract moisture level from sample name
+  mutate(moisture = str_extract(sample, "\\d+") %>% as.numeric()) %>%
+  mutate(moisture_label = paste0(moisture, "%")) %>%
+  # calculate fraction of gene expressed at each moisture level
+  group_by(moisture) %>%
+  mutate(
+    total_genes = n(),
+    nonzero_genes = sum(tpm > 0),
+    percent_nonzero = round(100 * nonzero_genes / total_genes, 1)
+  ) %>%
+  ungroup() %>%
+  # Remove genes with tpm=zero across all moisture levels
+  group_by(gene_id) %>%
+  filter(sum(tpm > 0) > 0) %>%
+  ungroup()
+
+print(paste("Number of genes after filtering:", length(unique(meadow_hyd_tpm_clean$gene_id))))
+
+```
+
+z-score normalized heatmap:
+```{r}
+meadow_tpm_matrix = meadow_hyd_tpm_clean %>%
+  select(gene_id, moisture, tpm) %>%
+  pivot_wider(names_from = moisture, values_from = tpm, values_fill = 0) %>%
+  column_to_rownames("gene_id") %>%
+  as.matrix()
+
+# Z-score normalize by row (gene)
+meadow_tpm_z = t(scale(t(meadow_tpm_matrix)))
+
+# reorder columns by increasing moisture
+meadow_moisture_order = c("6", "16", "24", "40")
+meadow_tpm_z_ordered = meadow_tpm_z[, meadow_moisture_order]
+
+ # Create color function for z-scores
+breakpoints_meadow = seq(-2, 2, length.out = 4)  # more balanced for z-scores
+meadow_col_fun = colorRamp2(
+  breakpoints_meadow,
+  viridis(length(breakpoints_meadow), option = "plasma")
+)
+
+# Create complex heatmap with dendrograms
+meadow_hmZ = Heatmap(
+  meadow_tpm_z_ordered,
+  name = "Z-score",
+  col = meadow_col_fun,
+  clustering_distance_rows = "euclidean",
+  clustering_method_rows = "ward.D2",
+  cluster_columns = FALSE,
+  #clustering_distance_columns = "euclidean", 
+  #clustering_method_columns = "ward.D2",
+  show_row_names = TRUE,
+  show_column_names = TRUE,
+  row_names_gp = gpar(fontsize = 8),
+  column_names_gp = gpar(fontsize = 10),
+  heatmap_legend_param = list(title = "Z-score"),
+  column_title = "Moisture Level (%)",
+  row_title = "Gene ID"
+)
+
+meadow_hmZ
+```
+
+extract cluster IDs for each gene and add to heatmap
+```{r}
+# extract row clustering from the heatmap
+meadow_row_dend = row_dend(draw(meadow_hmZ))
+# hierarchical clusters
+meadow_row_clusters = cutree(as.hclust(meadow_row_dend), k = 4)  # choosing k=4 based on visual inspection of the heatmap dendrogram
+# add hierarchical cluster information back to the data
+meadow_cluster_df = data.frame(
+  gene_id = names(meadow_row_clusters),
+  cluster = meadow_row_clusters
+)
+
+# alternatively, k-means clustering:
+fviz_nbclust(meadow_tpm_z_ordered, kmeans, method = "silhouette") +
+  labs(title = "Silhouette Method for K-means")
+set.seed(123)
+meadow_kmeans_clusters = kmeans(meadow_tpm_z, centers = 4, nstart = 25)$cluster
+
+# add k-means cluster information back to the data
+meadow_cluster_df_k = data.frame(
+  gene_id = names(meadow_kmeans_clusters),
+  cluster = meadow_kmeans_clusters
+)
+
+# compare with hierarchical clustering
+table(Hierarchical = meadow_row_clusters, Kmeans = meadow_kmeans_clusters)
+
+# replot with cluster annotations
+# create named color vector for clusters
+meadow_cluster_colors = rainbow(max(meadow_kmeans_clusters))
+names(meadow_cluster_colors) = as.character(1:max(meadow_kmeans_clusters))
+# create row annotation for clusters
+# color assignments made based on the patterns seen in the heatmap
+meadow_row_ha = rowAnnotation(
+  Cluster = as.factor(meadow_kmeans_clusters),
+  col = list(Cluster = c("3" = "#A0522D",
+  "1" = "#D4AF37",
+  "4" = "#7BADD9",
+  "2" = "#4A6FA5"))
+) 
+
+# Re-create heatmap with cluster annotation
+pdf(file =  paste0(data.path, "/data/meadow_TPM_heatmap.pdf"),
+    width = 3.5,
+    height = 2.5)
+Heatmap(
+  meadow_tpm_z_ordered,
+  name = "Z-score",
+  col = meadow_col_fun,
+  clustering_distance_rows = "euclidean",
+  clustering_method_rows = "ward.D2",
+  cluster_columns = FALSE,
+  #clustering_distance_columns = "euclidean", 
+  #clustering_method_columns = "ward.D2",
+  show_row_names = TRUE,
+  show_column_names = TRUE,
+  row_names_gp = gpar(fontsize = 5),
+  column_names_gp = gpar(fontsize = 8),
+  right_annotation = meadow_row_ha,  # add cluster annotation
+  heatmap_legend_param = list(title = "Z-score"),
+  column_title = "Moisture Level (%)",
+  row_title = "Gene ID"
+)
+dev.off()
+```
+
+add cluster info to the original dataframe, plot the distribution of TPM values for genes in each cluster across moisture levels.
+
+plot version 1:
+```{r}
+# map clusters back to the original dataframe
+meadow_hyd_tpm_clusters = meadow_hyd_tpm_clean %>%
+  left_join(meadow_cluster_df_k, by = "gene_id") %>%
+  # Convert cluster to factor for better plotting
+  mutate(cluster = as.factor(cluster))
+
+meadow_tpm_dist_clustersPlot = meadow_hyd_tpm_clusters %>%
+  filter(tpm > 0) %>%  # Remove zeros for log scale
+  ggplot(aes(x = as.factor(moisture), y = tpm, color = cluster)) +
+  geom_jitter(alpha = 0.75, width = 0.2,  size = 2) +
+  # quartiles as thinner lines
+  stat_summary(fun = "median", geom = "crossbar", width = 0.25, 
+               color = "black", size = 0.5, alpha = 0.6) +
+  stat_summary(fun.data = function(x) data.frame(ymin = quantile(x, 0.25), 
+                                                 ymax = quantile(x, 0.75)), 
+               geom = "errorbar", width = 0.25, color = "black", size = 0.4) +
+  # add percentage text at top of each moisture group
+  geom_text(aes(x = as.factor(moisture), y = Inf, label = paste0(percent_nonzero, "%")), vjust = 1.2, hjust = 0.5, size = 3.5, color = "black", inherit.aes = FALSE) +
+  # colors to match the heatmap cluster colors
+  scale_color_manual(values = c("#F4A460",  "#87CEEB", "#8B4513", "#191970")) +
+  scale_y_continuous(trans = "symlog", breaks = c(-10^(2:0), 0, 10^(0:2))) +
+  labs(
+    x = "Moisture Level (%)",
+    y = expression(log[10]~"(TPM)"),
+    color = "Cluster",
+    fill = "Cluster") +
+  theme_minimal() +
+  theme(
+    legend.position = "right",
+    axis.text.x = element_text(size = 10),
+    strip.text = element_text(size = 10)
+  )
+meadow_tpm_dist_clustersPlot
+```
+
+plot version 1a:
+```{r}
+# First, identify dominant clusters per moisture level
+dominant_clusters_meadow = meadow_hyd_tpm_clusters %>%
+  filter(tpm > 0) %>%
+  group_by(moisture, cluster) %>%
+  summarise(n = n(), .groups = "drop") %>%
+  group_by(moisture) %>%
+  slice_max(n, n = 1) %>%
+  mutate(is_dominant = TRUE)
+
+# Add dominant status to main data
+plot1_data_meadow = meadow_hyd_tpm_clusters %>%
+  filter(tpm > 0) %>%
+  left_join(dominant_clusters_meadow %>% select(moisture, cluster, is_dominant), 
+            by = c("moisture", "cluster")) %>%
+  mutate(is_dominant = ifelse(is.na(is_dominant), FALSE, TRUE))
+
+# add an outline to highlight dominant clusters better:
+meadow_dist_plot1 = plot1_data_meadow %>%
+  ggplot(aes(x = as.factor(moisture), y = tpm, color = cluster)) +
+  geom_jitter(aes(stroke = ifelse(is_dominant, 0.75, 0)), 
+              width = 0.2, size = 2, alpha = 0.8) +
+  #scale_stroke_identity() +  # Use stroke values directly
+  # quartiles as thinner lines
+  stat_summary(fun = "median", geom = "crossbar", width = 0.2, 
+               color = "black", size = 0.5, alpha = 0.6) +
+  stat_summary(fun.data = function(x) data.frame(ymin = quantile(x, 0.25), 
+                                                 ymax = quantile(x, 0.75)), 
+               geom = "errorbar", width = 0.2, color = "black", size = 0.4) +
+  # add percentage text at top of each moisture group
+  geom_text(aes(x = as.factor(moisture), y = Inf, label = paste0(percent_nonzero, "%")), 
+            vjust = 1.2, hjust = 0.5, size = 3.5, color = "black", inherit.aes = FALSE) +
+  scale_y_continuous(trans = "symlog", breaks = c(-10^(5:0), 0, 10^(0:5))) +
+  scale_color_manual(values = c("#F4A460",  "#87CEEB", "#8B4513", "#191970")) +
+  labs(
+    x = "Moisture Level (%)",
+    y = expression(log[10]~"(TPM)"),
+    color = "Cluster") +
+  theme_linedraw() +
+  theme(
+    legend.position = "right",
+    axis.text.x = element_text(size = 10),
+    strip.text = element_text(size = 10)
+  )
+meadow_dist_plot1
+```
+
+plot version 2:
+plot each gene cluster separately for each moisture level
+```{r}
+# calculate summary data for gene clusters
+summary_data_meadow = meadow_hyd_tpm_clusters %>%
+  filter(tpm > 0) %>%
+  group_by(moisture, moisture_label, cluster) %>%
+  summarise(
+    n_active = n(),
+    median_tpm = median(tpm),
+    .groups = "drop"
+  ) %>%
+  group_by(moisture) %>%
+  mutate(
+    total_active = sum(n_active),
+    prop_active = n_active / total_active
+  )
+
+summary_data_meadow$moisture_label = factor(summary_data_meadow$moisture_label, levels = c("6%", "16%", "24%", "40%"))
+
+
+# Main plot
+meadow_dist_plot2 = meadow_hyd_tpm_clusters %>%
+  filter(tpm > 0) %>%
+  mutate(moisture_label = factor(moisture_label, levels = c("6%", "16%", "24%", "40%"))) %>%
+  ggplot(aes(x = cluster, y = tpm, color = cluster, fill = cluster)) +
+  geom_jitter(width = 0.2, height = 0, size = 1.5) +
+  stat_summary(fun.data = function(x) data.frame(ymin = quantile(x, 0.25), 
+                                                 ymax = quantile(x, 0.75)), 
+               geom = "errorbar", width = 0.3, color = "black", 
+               size = 0.3, alpha = 0.75) +
+  stat_summary(fun = "median", geom = "crossbar", width = 0.4, 
+               color = "black", size = 0.3, alpha = 0.5) +
+  # sized summary points
+  geom_point(data = summary_data_meadow, 
+             aes(x = cluster, y = 0.01, size = prop_active),
+             alpha = 0.4, stroke = 1, color = "grey60") +
+  geom_text(aes(x = 2.5, y = Inf, label = paste0(percent_nonzero, "%")), 
+            vjust = 1.2, hjust = 0.5, size = 3.5, color = "black", 
+            inherit.aes = FALSE) +
+  scale_x_discrete(expand = expansion(mult = c(0.05, 0.05))) +
+  scale_y_continuous(trans = "symlog", breaks = c(-10^(2:0), 0, 10^(0:2))) +
+  scale_color_manual(values = c("4" = "#4A6FA5", "1" = "#D4AF37", 
+                               "2" = "#7BADD9", "3" = "#A0522D")) +
+  scale_fill_manual(values = c("4" = "#4A6FA5", "1" = "#D4AF37", 
+                               "2" = "#7BADD9", "3" = "#A0522D")) +
+  scale_size_continuous(name = "Proportion of\nexpressed genes\nper Cluster", range = c(1.5, 6)) +
+  facet_wrap(~moisture_label, nrow = 1) +
+  labs(
+    x = "Cluster",
+    y = expression(log[10]~"(TPM)"),
+    color = "Cluster",
+    fill = "Cluster",
+  ) +
+  theme_linedraw()
+
+meadow_dist_plot2
+```
+
+attempt to match distribution plot with the heatmap normalized plot:
+```{r}
+meadow_gene_order = meadow_tpm_z_ordered %>%
+  as.data.frame() %>%
+  rownames_to_column("gene_id") %>%
+  left_join(meadow_cluster_df_k, by = "gene_id") %>%
+  arrange(cluster, desc(`40`)) %>%  # Sort by cluster, then by expression at highest moisture
+  pull(gene_id)
+
+# use Z-scores in boxplot to match heatmap
+meadow_tpm_z_long = meadow_tpm_z_ordered %>%
+  as.data.frame() %>%
+  rownames_to_column("gene_id") %>%
+  pivot_longer(cols = -gene_id, names_to = "moisture", values_to = "z_score") %>%
+  mutate(moisture = as.numeric(moisture)) %>%
+  # add cluster information
+  left_join(meadow_cluster_df_k, by = "gene_id") %>%
+  mutate(cluster = as.factor(cluster))
+
+# create a simplified view with fewer genes for clarity
+meadow_top_genes_per_cluster = meadow_tpm_z_long %>%
+  group_by(cluster) %>%
+  # Select genes with most extreme patterns
+  slice_max(abs(z_score), n = 10) %>%
+  pull(gene_id) %>%
+  unique()
+
+meadow_simplified_plot = meadow_tpm_z_long %>%
+  #filter(gene_id %in% pbs_top_genes_per_cluster) %>%
+  ggplot(aes(x = as.factor(moisture), y = z_score, color = cluster)) +
+  geom_hline(yintercept = 0, linetype = "dashed", alpha = 0.3) +
+  # geom_line(aes(group = gene_id), alpha = 0.3, size = 0.5) +
+  geom_jitter(alpha = 0.7, width = 0.1, size = 1) +
+  #stat_summary(fun = mean, geom = "line", aes(group = cluster), size = 1, alpha = 0.9) +
+  stat_summary(fun = mean, geom = "point", aes(group = cluster), size = 3) +
+  scale_color_manual(values = c("#F4A460",  "#87CEEB", "#8B4513", "#191970")) +
+  labs(
+    x = "Moisture Level (%)",
+    y = "Z-score",
+    color = "Cluster"
+  ) +
+  theme_minimal()
+
+meadow_simplified_plot
+
+```
+
+
+
+--- Forest Soil
+
+Read in data:
+```{r}
+forest_hyd_tpm = read.table(paste0(data.path, "/data/forest_hyd_tpm.txt"), sep="\t", header=TRUE, check.names = FALSE)
+
+# how many are expressed in at least one moisture level?
+forest_hyd_tpm %>% 
+  filter(rowSums(across(tail(names(forest_hyd_tpm), 4)) == 0) < 4) %>%
+  dim()
+```
+
+Examine the distribution of TPM values across moisture levels:
+```{r}
+forest_hyd_tpm %>%
+  filter(rowSums(across(tail(names(forest_hyd_tpm), 4)) == 0) < 4) %>%
+  pivot_longer(cols = tail(names(forest_hyd_tpm), 4), 
+               names_to = "sample", values_to = "TPM") %>%
+  group_by(sample) %>%
+  ggplot(aes(x = sample, y = TPM)) +
+  geom_boxplot()
+
+```
+
+Calculate total hydrogenase activity per moisture level
+```{r}
+forest_tot_activity = forest_hyd_tpm %>%
+  pivot_longer(cols = matches("%"), 
+               names_to = "% moisture", 
+               values_to = "tpm") %>%
+  filter(tpm>0) %>%
+  group_by(`% moisture`) %>% 
+  summarise(total_tpm = sum(tpm),
+            median_tpm = median(tpm)) %>%
+  arrange("% moisture") %>%
+  mutate(soil_type="Forest")
+
+forest_tot_activity
+```
+
+Filter and prepare for heatmap/cluster analyses:
+```{r}
+forest_hyd_tpm_clean = forest_hyd_tpm %>%
+  # Convert to long format for ggplot
+  pivot_longer(cols = matches("%"), 
+               names_to = "sample", 
+               values_to = "tpm") %>%
+  # Extract moisture level from sample name
+  mutate(moisture = str_extract(sample, "\\d+") %>% 
+           as.numeric()) %>%
+  mutate(moisture_label = paste0(moisture, "%")) %>%
+  # calculate fraction of gene expressed at each moisture level
+  group_by(moisture) %>%
+  mutate(
+    total_genes = n(),
+    nonzero_genes = sum(tpm > 0),
+    percent_nonzero = round(100 * nonzero_genes / total_genes, 1)
+  ) %>%
+  ungroup() %>%
+  # Remove genes with tpm=zero across all moisture levels
+  group_by(gene_id) %>%
+  filter(sum(tpm > 0) > 0) %>%
+  ungroup()
+
+# number of genes remaining after filtering:
+print(paste("Number of genes after filtering:", length(unique(forest_hyd_tpm_clean$gene_id))))
+
+```
+
+z-score normalized heatmap of TPM values:
+```{r}
+forest_tpm_matrix = forest_hyd_tpm_clean %>%
+  select(gene_id, moisture, tpm) %>%
+  pivot_wider(names_from = moisture, values_from = tpm, values_fill = 0) %>%
+  column_to_rownames("gene_id") %>%
+  as.matrix()
+
+# Z-score normalize by row (gene)
+forest_tpm_z = t(scale(t(forest_tpm_matrix)))
+# reorder columns by increasing moisture
+forest_moisture_order = c("7", "11", "44", "56")
+forest_tpm_z_ordered = forest_tpm_z[, forest_moisture_order]
+
+# create color function for z-scores
+breakpoints_forest = seq(-2, 2, length.out = 4)  # more balanced for z-scores
+forest_col_fun = colorRamp2(
+  breakpoints_forest,
+  viridis(length(breakpoints_forest), option = "plasma")
+)
+
+# Create complex heatmap with dendrograms
+forest_hmZ = Heatmap(
+  forest_tpm_z_ordered,
+  name = "Z-score",
+  col = forest_col_fun,
+  clustering_distance_rows = "euclidean",
+  clustering_method_rows = "ward.D2",
+  cluster_columns = FALSE,
+  #clustering_distance_columns = "euclidean", 
+  #clustering_method_columns = "ward.D2",
+  show_row_names = TRUE,
+  show_column_names = TRUE,
+  row_names_gp = gpar(fontsize = 8),
+  column_names_gp = gpar(fontsize = 10),
+  heatmap_legend_param = list(title = "Z-score"),
+  column_title = "Moisture Level (%)",
+  row_title = "Gene ID"
+)
+
+forest_hmZ
+```
+
+extract cluster IDs for each gene and add to heatmap
+```{r}
+# Extract the row clustering the heatmap
+forest_row_dend = row_dend(draw(forest_hmZ))
+# hierarchical clustering
+forest_row_clusters = cutree(as.hclust(forest_row_dend), k = 4)  # choosing k=4 based on visual inspection of the heatmap dendrogram
+
+# add hierarchical cluster information back to the data
+forest_cluster_df <- data.frame(
+  gene_id = names(forest_row_clusters),
+  cluster = forest_row_clusters
+)
+
+# alternatively, k-means clustering:
+# determine optimal clusters for k-means
+fviz_nbclust(forest_tpm_z_ordered, kmeans, method = "silhouette") +
+  labs(title = "Silhouette Method for K-means")
+
+set.seed(123)
+forest_kmeans_clusters = kmeans(forest_tpm_z, centers = 4, nstart = 25)$cluster
+
+# add k-means cluster information back to the data
+forest_cluster_df_k = data.frame(
+  gene_id = names(forest_kmeans_clusters),
+  cluster = forest_kmeans_clusters
+)
+
+# compare with hierarchical clustering
+table(Hierarchical = forest_row_clusters, Kmeans = forest_kmeans_clusters)
+
+# replot with cluster annotations
+# create named color vector for clusters
+forest_cluster_colors = rainbow(max(forest_kmeans_clusters))
+names(forest_cluster_colors) = as.character(1:max(forest_kmeans_clusters))
+# create row annotation for clusters
+# color assignments made based on the patterns seen in the heatmap
+forest_row_ha = rowAnnotation(
+  Cluster = as.factor(forest_kmeans_clusters),
+  col = list(Cluster = c("4" = "#A0522D",
+  "1" = "#D4AF37",
+  "3" = "#7BADD9",
+  "2" = "#4A6FA5"))
+) 
+
+# Re-create heatmap with cluster annotation
+pdf(file =  paste0(data.path, "/data/forest_TPM_heatmap.pdf"),
+    width = 4,
+    height = 5.5)
+Heatmap(
+  forest_tpm_z_ordered,
+  name = "Z-score",
+  col = meadow_col_fun,
+  clustering_distance_rows = "euclidean",
+  clustering_method_rows = "ward.D2",
+  cluster_columns = FALSE,
+  #clustering_distance_columns = "euclidean", 
+  #clustering_method_columns = "ward.D2",
+  show_row_names = TRUE,
+  show_column_names = TRUE,
+  row_names_gp = gpar(fontsize = 5),
+  column_names_gp = gpar(fontsize = 8),
+  right_annotation = forest_row_ha,  # add cluster annotation
+  heatmap_legend_param = list(title = "Z-score"),
+  column_title = "Moisture Level (%)",
+  row_title = "Gene ID"
+)
+dev.off()
+
+```
+
+add cluster info to the original dataframe, plot the distribution of TPM values for genes in each cluster across moisture levels.
+
+plot version 1:
+```{r}
+# map clusters back to the original dataframe
+forest_hyd_tpm_clusters = forest_hyd_tpm_clean %>%
+  left_join(forest_cluster_df_k, by = "gene_id") %>%
+  # convert cluster to factor for better plotting
+  mutate(cluster = as.factor(cluster))
+
+forest_tpm_dist_clustersPlot = forest_hyd_tpm_clusters %>%
+  filter(tpm > 0) %>%  # Remove zeros for log scale
+  ggplot(aes(x = as.factor(moisture), y = tpm, color = cluster)) +
+  geom_jitter(alpha = 0.7, width = 0.2,  size = 2) +
+  # quartiles as thinner lines
+  stat_summary(fun = "median", geom = "crossbar", width = 0.25, 
+               color = "black", size = 0.5, alpha = 0.6) +
+  stat_summary(fun.data = function(x) data.frame(ymin = quantile(x, 0.25), 
+                                                 ymax = quantile(x, 0.75)), 
+               geom = "errorbar", width = 0.25, color = "black", size = 0.4) +
+  # add percentage text at top of each moisture group
+  geom_text(aes(x = as.factor(moisture), y = Inf, label = paste0(percent_nonzero, "%")), vjust = 1.2, hjust = 0.5, size = 3.5, color = "black", inherit.aes = FALSE) +
+  scale_y_continuous(trans = "symlog", breaks = c(-10^(5:0), 0, 10^(0:5))) +
+  # colors to match the heatmap cluster colors
+  scale_color_manual(values = c("#F4A460", "#191970", "#87CEEB", "#8B4513")) +
+  labs(
+    x = "Moisture Level (%)",
+    y = expression(log[10]~"(TPM)"),
+    color = "Cluster",
+    fill = "Cluster") +
+  theme_minimal() +
+  theme(
+    legend.position = "right",
+    axis.text.x = element_text(size = 10),
+    strip.text = element_text(size = 10)
+  )
+forest_tpm_dist_clustersPlot
+```
+
+plot version 1a:
+```{r}
+# First, identify dominant clusters per moisture level
+dominant_clusters_forest = forest_hyd_tpm_clusters %>%
+  filter(tpm > 0) %>%
+  group_by(moisture, cluster) %>%
+  summarise(n = n(), .groups = "drop") %>%
+  group_by(moisture) %>%
+  slice_max(n, n = 1) %>%
+  mutate(is_dominant = TRUE)
+
+# Add dominant status to main data
+plot1_data_forest = forest_hyd_tpm_clusters %>%
+  filter(tpm > 0) %>%
+  left_join(dominant_clusters_forest %>% select(moisture, cluster, is_dominant), 
+            by = c("moisture", "cluster")) %>%
+  mutate(is_dominant = ifelse(is.na(is_dominant), FALSE, TRUE))
+
+# add an outline to highlight dominant clusters better:
+forest_dist_plot1 = plot1_data_forest %>%
+  ggplot(aes(x = as.factor(moisture), y = tpm, color = cluster)) +
+  geom_jitter(aes(stroke = ifelse(is_dominant, 0.75, 0)), 
+              width = 0.2, size = 2, alpha = 0.8) +
+  #scale_stroke_identity() +  # Use stroke values directly
+  # quartiles as thinner lines
+  stat_summary(fun = "median", geom = "crossbar", width = 0.2, 
+               color = "black", size = 0.5, alpha = 0.6) +
+  stat_summary(fun.data = function(x) data.frame(ymin = quantile(x, 0.25), 
+                                                 ymax = quantile(x, 0.75)), 
+               geom = "errorbar", width = 0.2, color = "black", size = 0.4) +
+  # add percentage text at top of each moisture group
+  geom_text(aes(x = as.factor(moisture), y = Inf, label = paste0(percent_nonzero, "%")), 
+            vjust = 1.2, hjust = 0.5, size = 3.5, color = "black", inherit.aes = FALSE) +
+  scale_y_continuous(trans = "symlog", breaks = c(-10^(5:0), 0, 10^(0:5))) +
+  scale_color_manual(values = c("#F4A460", "#191970", "#87CEEB", "#8B4513")) +
+  labs(
+    x = "Moisture Level (%)",
+    y = expression(log[10]~"(TPM)"),
+    color = "Cluster") +
+  theme_linedraw() +
+  theme(
+    legend.position = "right",
+    axis.text.x = element_text(size = 10),
+    strip.text = element_text(size = 10)
+  )
+forest_dist_plot1
+```
+
+
+
+plot version 2:
+plot each gene cluster separately for each moisture level
+```{r}
+# calculate summary data for gene clusters
+summary_data_forest = forest_hyd_tpm_clusters %>%
+  filter(tpm > 0) %>%
+  group_by(moisture, moisture_label, cluster) %>%
+  summarise(
+    n_active = n(),
+    median_tpm = median(tpm),
+    .groups = "drop"
+  ) %>%
+  group_by(moisture) %>%
+  mutate(
+    total_active = sum(n_active),
+    prop_active = n_active / total_active
+  )
+
+summary_data_forest$moisture_label = factor(summary_data_forest$moisture_label, levels = c("7%", "11%", "44%", "56%"))
+
+forest_hyd_tpm_clusters$moisture_label = factor(forest_hyd_tpm_clusters$moisture_label, levels = c("7%", "11%", "44%", "56%"))
+
+# plot
+forest_dist_plot2 = forest_hyd_tpm_clusters %>%
+  filter(tpm > 0) %>%
+  ggplot(aes(x = cluster, y = tpm, color = cluster, fill = cluster)) +
+  geom_jitter(width = 0.25, height = 0, size = 1.5) +
+  stat_summary(fun.data = function(x) data.frame(ymin = quantile(x, 0.25), 
+                                                 ymax = quantile(x, 0.75)), 
+               geom = "errorbar", width = 0.3, color = "black", 
+               size = 0.3, alpha = 0.75) +
+  stat_summary(fun = "median", geom = "crossbar", width = 0.4, 
+               color = "black", size = 0.3, alpha = 0.5) +
+  # sized summary points
+  geom_point(data = summary_data_forest, 
+             aes(x = cluster, y = 0.01, size = prop_active),
+             alpha = 0.4, stroke = 1, color = "grey60") +
+  geom_text(aes(x = 2.5, y = Inf, label = paste0(percent_nonzero, "%")), 
+            vjust = 1.2, hjust = 0.5, size = 3.5, color = "black", 
+            inherit.aes = FALSE) +
+  scale_x_discrete(expand = expansion(mult = c(0.05, 0.05))) +
+  scale_y_continuous(trans = "symlog", breaks = c(-10^(2:0), 0, 10^(0:2))) +
+  scale_color_manual(values = c("4" = "#A0522D", "1" = "#D4AF37", "3" = "#7BADD9", "2" = "#4A6FA5")) +
+  scale_fill_manual(values = c("4" = "#A0522D", "1" = "#D4AF37", "3" = "#7BADD9", "2" = "#4A6FA5")) +
+  scale_size_continuous(name = "Proportion of\nexpressed genes\nper Cluster", range = c(1.5, 6)) +
+  facet_wrap(~moisture_label, nrow=1) +
+  #facet_wrap(~paste(moisture, "%"), nrow = 1) +
+  labs(
+    x = "Cluster",
+    y = expression(log[10]~"(TPM)"),
+    color = "Cluster",
+    fill = "Cluster",
+  ) +
+  theme_linedraw()
+forest_dist_plot2
+
+```
+
+
+# dist plot 1 combined
+```{r}
+
+distPlot1 = (pbs_dist_plot1 + theme(legend.position = "none")) + (forest_dist_plot1 + theme(legend.position = "none")) + meadow_dist_plot1
+
+distPlot1
+
+pdf(file =  paste0(data.path, "/data/hyd_tpm_distPlot1.pdf"),
+    width = 10,
+    height = 4)
+print(distPlot1)
+dev.off()
+```
+
+# dist plot 2 combined
+```{r}
+distPlot2 = (pbs_dist_plot2 + theme(legend.position = "none")) +
+  (forest_dist_plot2 + theme(legend.position = "none")) + 
+  (meadow_dist_plot2)
+
+distPlot2
+
+pdf(file =  paste0(data.path, "/data/hyd_tpm_distPlot2.pdf"),
+    width = 16,
+    height = 5)
+print(distPlot2)
+dev.off()
+```
+
+
+
+
+
+
+Plot total activity across soil types
+```{r}
+tot.activity = bind_rows(pbs_tot_activity, meadow_tot_activity, forest_tot_activity)
+
+tot.tpm = ggplot(tot.activity, aes(x = as.numeric(gsub("%", "", `% moisture`)), y = total_tpm, color = soil_type, group = soil_type)) +
+  geom_line(size = 1) +
+  geom_point(size = 3) +
+  scale_y_continuous(trans = "log10") +
+  scale_color_manual(values=c("forestgreen", "gold", "violetred")) +
+  labs(
+    x = "Moisture level (%)",
+    y = "Log10(Total TPM)",
+    color = "Soil Type"
+  ) + theme_minimal()
+
+median.tpm = ggplot(tot.activity, aes(x = as.numeric(gsub("%", "", `% moisture`)), y = median_tpm, color = soil_type, group = soil_type)) + 
+  geom_line(size = 1) +
+  geom_point(size = 3) +
+  scale_y_continuous(trans = "log10") +
+  scale_color_manual(values=c("forestgreen", "gold", "violetred")) +
+  labs(
+    x = "Moisture level (%)",
+    y = "Log10(Median TPM)",
+    color = "Soil Type"
+  )  + theme_minimal()
+median.tpm
+
+tot.activity.plot = tot.tpm/median.tpm
+
+pdf(file =  paste0(data.path, "/data/Hyd_totalTPM_all3Soils.pdf"),
+    width = 4.5,
+    height = 6)
+print(tot.activity.plot)
+dev.off()
+```
+
+
+```{r}
+# Distribution of TPM values across conditions
+
+combined_data = bind_rows(
+  pbs_hyd_tpm_clean %>% mutate(soil_type = "Pine Barrens"),
+  meadow_hyd_tpm_clean %>% mutate(soil_type = "Meadow"),
+  forest_hyd_tpm_clean %>% mutate(soil_type = "Forest")
+  ) %>%
+  mutate(
+    soil_type = factor(soil_type, levels = c("Pine Barrens", "Meadow", "Forest"))
+  )
+
+pdf(file =  paste0(data.path, "/data/Hyd_Dist_all3Soils.pdf"),
+    width = 5.25,
+    height = 4)
+
+combined_data %>%
+  mutate(moisture_factor = factor(moisture, levels = sort(unique(moisture)))) %>%
+  ggplot(aes(x = moisture_factor, y = tpm, fill = soil_type)) +
+  geom_boxplot(alpha = 0.9) +
+  geom_jitter() +
+  scale_y_continuous(trans = "symlog", breaks = c(-10^(5:0), 0, 10^(0:5))) +
+  scale_fill_manual(values = c("forestgreen", "gold", "violetred")) +
+  labs(
+    x = "Moisture Level (%)",
+    y = "TPM (symlog scale)",
+    # y = expression(log[10]~"(TPM)"),
+    fill = "Soil Type"
+  ) +
+  facet_grid(~soil_type, scales = "free") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+dev.off()
+```
+
+
+# stat tests
+```{r}
+# statistical tests by soil type  
+# is median tpm significantly different across moisture levels in each soil?
+stats_tpm = combined_data %>%
+  group_by(soil_type) %>%
+  summarise(
+    n_moisture_levels = n_distinct(moisture),
+    kruskal_p = ifelse(n_distinct(moisture) >= 2, 
+                      kruskal.test(tpm ~ factor(moisture))$p.value, 
+                      NA), .groups = 'drop'
+  ) %>%
+  mutate(
+    kruskal_p_adj = p.adjust(kruskal_p, method = "BH"),
+    sig_label = case_when(
+      is.na(kruskal_p) ~ "",
+      kruskal_p < 0.001 ~ "***",
+      kruskal_p < 0.01 ~ "**",
+      kruskal_p < 0.05 ~ "*", 
+      TRUE ~ "ns"
+    ),
+    label_text = ifelse(!is.na(kruskal_p), 
+                       paste0("p = ", round(kruskal_p, 3), " ", sig_label), "")
+  )
+print(stats_tpm)
+
+# post-hoc pairwise comparison
+
+# subset data for Meadow soil
+meadow_data = combined_data %>% filter(soil_type == "Meadow")
+
+# run Dunn's test for TPM across moisture levels
+dunn.test(meadow_data$tpm, meadow_data$moisture, method = "bh")
+
+
+
+```
+
+
+
+---HA-H2ases in MAGs:
+
+```{r}
+
+# read in HA H2ase MAG data
+mag_ha = read.table(paste0(data.path, "/data/ha_geneIDs_MAGs.txt"), sep="\t", header=TRUE, check.names = FALSE)
+
+# combine with tpm and moisture data
+mag_ha_tpm = mag_ha %>%
+  left_join(combined_data %>% select(gene_id, tpm, moisture_label), by = "gene_id")
+
+# plot tpm of MAG-derived h2-hases
+mag_ha_tpm %>%
+  mutate(moisture_label = factor(moisture_label, levels = c("3%", "6%", "7%", "11%", "16%", "24%", "31%", "39%", "40%", "44%", "56%", "78%"))) %>%
+  ggplot(aes(x = moisture_label, y = tpm, color = mag_id, group = gene_id)) +
+  geom_line(alpha = 0.7, size = 0.5) +
+  geom_point(alpha = 0.8, size = 1.5) +
+  scale_y_log10() +  # Recommended since TPM values can vary widely
+  facet_wrap(~soil_type, scales = "free") +
+  labs(
+    x = "Moisture Level",
+    y = "TPM",
+    color = "MAG ID",
+    title = "Gene Expression Across Moisture Levels by MAG"
+  ) +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),  # Rotate x-axis labels
+    legend.position = "bottom",
+    strip.text = element_text(face = "bold")
+  )
+
+# write to file:
+# mag_ha_tpm %>% write.table(., paste0(data.path, "/data/mag_ha_tpm.txt"), sep="\t", quote=FALSE, row.names = FALSE)
+
+```
+

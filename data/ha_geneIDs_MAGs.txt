@@ -1,0 +1,13 @@
+soil_type	mag_id	gene_id
+Pine Barrens	pbs_bin_13	contig_487250_24
+Pine Barrens	pbs_bin_4	contig_1144081_1
+Pine Barrens	pbs_bin_5	contig_2362_2
+Pine Barrens	pbs_bin_6	contig_474831_14
+Pine Barrens	pbs_bin_9	contig_1029603_4
+Meadow	meadow_bin_1	contig_626881_1
+Meadow	meadow_bin_4	contig_210182_9
+Forest	forest_bin_1	contig_299973_5
+Forest	forest_bin_13	contig_463269_58
+Forest	forest_bin_14	contig_783246_2
+Forest	forest_bin_17	contig_779337_40
+Forest	forest_bin_2	contig_806610_1

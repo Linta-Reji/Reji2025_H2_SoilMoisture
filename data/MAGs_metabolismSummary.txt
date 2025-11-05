@@ -6,7 +6,7 @@ Flagellum	flagellin	0	0	0	1	1	1	1	0	1	0	0	0
 Chemotaxis	MotAB	0	0	1	1	1	1	1	0	1	0	0	0
 CAZY	GH5_cellulase	0	0	1	1	1	1	1	0	1	1	1	1
 CAZY	GH13_amylase	1	1	1	1	1	1	1	1	1	1	1	1
-CAZY	GH16_chitinase	1	0	0	0	0	1	1	0	1	1	0	1
+CAZY	GH16_xyloglucan	1	0	0	0	0	1	1	0	1	1	0	1
 CAZY	GH30_xylanase	0	0	1	0	1	1	1	0	0	0	0	0
 CAZY	GH43_xyloglucanase	1	1	0	0	0	1	0	0	0	1	0	1
 Polyphenols	Polyphenol oxidase	0	0	1	0	1	1	1	1	0	1	0	1

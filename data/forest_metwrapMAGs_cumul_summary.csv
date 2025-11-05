@@ -1,4 +1,4 @@
-user_genome,domain,phylum,class,order,family,genus,species,red_value,completeness,contamination,strain_heterogeneity,F_6_rpkm,F_10_rpkm,F_40_rpkm,F_orig_30_rpkm,FS_30_rpkm,hydrogenase,hyd_type_group,hyd_affinity,F_6_MT_tpm,F_10_MT_tpm,F_orig_30_MT_tpm,F_40_MT_tpm
+user_genome,domain,phylum,class,order,family,genus,species,red_value,completeness,contamination,strain_heterogeneity,7%_rpkm,11%_rpkm ,44%_rpkm,56%_rpkm,32%_rpkm,hydrogenase,hyd_type_group,hyd_affinity,7%_tpm,11%_tpm,56%_tpm,44%_tpm
 forest_bin_1,d__Bacteria,p__Acidobacteriota,c__Thermoanaerobaculia,o__Multivoradales,f__UBA5704,g__UBA5704,s__,0.91188,92.54,4.27,20,21.9,7.4,5.1,5.1,6.2,yes,"NiFe_1h, FeFe_C3",HA,439848.2,429298.66,593027.44,538273.8
 forest_bin_10,d__Archaea,p__Thermoproteota,c__Nitrososphaeria,o__Nitrososphaerales,f__Nitrososphaeraceae,g__Nitrosopolaris,s__,0.98322,83.29,6.8,0,7.6,7,3.1,4.3,5,no,NA,NA,0,0,0,0
 forest_bin_11,d__Bacteria,p__Desulfobacterota_B,c__Binatia,o__Binatales,f__Binataceae,g__JAFAHS01,s__,0.98527,70.91,7.52,0,4.3,4,3.1,2.9,4.4,no,NA,NA,0,0,0,0
